@@ -97,7 +97,7 @@ Derrotas al adelantar:
 
 ## Cómo se gana y cómo se pierde
 
-**Ganas** cuando llegas al domo. Tu tiempo se mide desde la partida hasta que frenas frente al domo.
+**Ganas** cuando llegas al domo. Tu tiempo se mide desde la partida hasta que cruzas la meta (los postes con banderas a cuadros). Después de la meta el tiempo ya no cuenta.
 
 **Pierdes** si ocurre cualquiera de estas cosas:
 

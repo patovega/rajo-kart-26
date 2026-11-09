@@ -1302,7 +1302,7 @@ function metaMensaje() {      // tarjeta de felicitación bajo el aviso de meta;
 }
 function stepArrival(dt) {      // tramo final automático: sigue por la superficie, gira hacia el domo y se estaciona frente a su puerta
   if (arrive.park) { parkStep(dt); return; }
-  arrive.t += dt; tGame += dt;      // el tiempo sigue corriendo hasta frenar frente al domo
+  arrive.t += dt;      // el tiempo se detiene al cruzar la meta
   const dist = END_S - P.s, vt = dist > 50 ? CRUISE : Math.max(0, Math.min(CRUISE, dist * 0.3));      // sobre la superficie va a 50 km/h y frena al llegar
   P.v += clamp(vt - P.v, -3.2 * dt, 2.5 * dt); P.s = Math.min(END_S, P.s + P.v * dt);
   arrive.brake = vt < P.v - 0.3;
