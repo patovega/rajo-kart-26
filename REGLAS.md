@@ -16,6 +16,8 @@ Controles en pantalla:
 
 ![Camión cerca, con el botón de autorización activo](imagenes/celular_camion_cerca.png)
 
+![Celular: camión a 29 m y botón de autorización amarillo](imagenes/celular_solicitar_autorizacion.png)
+
 ## Pedir autorización al CAEX
 
 1. Acércate a un camión por detrás, a menos de 55 m. Se activa el botón **Solicitar autorización**.
