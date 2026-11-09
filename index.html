@@ -1313,15 +1313,30 @@ function stepArrival(dt) {      // tramo final automático: sigue por la superfi
 }
 let playerName = '';
 const cleanName = v => v.replace(/[|\[\]<>\r\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 20);
-// Filtro de nombres: nombre y apellido, sin nombres de broma y sin palabras de animales (el apellido "León" sí se permite)
-const NOMBRES_BROMA = ['benito camelo', 'melosoba', 'rosamel fierro', 'juan sin nombre', 'pepito grillo', 'pancho perez', 'nn', 'xxx', 'asdf', 'test', 'prueba'];
+// Filtro de nombres: nombre y apellido; no puede coincidir con nombres_prohibidos.json; sin palabras de animales (el apellido "León" sí se permite)
+let LISTA_NOMBRES = null;      // se carga desde nombres_prohibidos.json al abrir la página
+fetch('nombres_prohibidos.json', { cache: 'no-store' }).then(r => r.json()).then(j => { LISTA_NOMBRES = j; }).catch(() => {});
 const ANIMALES = ['perro','perra','gato','gata','vaca','toro','cerdo','cerda','chancho','cabra','oveja','caballo','burro','mula','gallina','gallo','pato','pavo','conejo','raton','rata','lobo','zorro','oso','osa','tigre','elefante','jirafa','mono','gorila','cebra','hipopotamo','rinoceronte','ballena','delfin','tiburon','pez','sapo','rana','lagarto','lagartija','cocodrilo','serpiente','culebra','vibora','aguila','buho','paloma','loro','perico','gorrion','pajaro','ardilla','castor','nutria','foca','morsa','pinguino','camello','llama','alpaca','vicuna','pollo','hormiga','abeja','mosca','arana','mariposa','grillo','escarabajo','pulga','piojo','gusano','caracol','zancudo','mosquito','cucaracha','pulpo','calamar','medusa','cangrejo','langosta','tortuga','iguana','camaleon','dragon','topo','erizo','puma','jaguar','pantera','hiena','chacal','coyote','bisonte','bufalo','antilope','ciervo','venado','alce','reno','cuervo','buitre','halcon','gaviota','tucan','pitbull','bulldog'];
-const sinTildes = t => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const norm = t => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 const nombreValido = n => {
-  const t = sinTildes(n), palabras = t.split(' ').filter(Boolean);
-  if (palabras.length < 2) return false;                                  // nombre y apellido
-  if (NOMBRES_BROMA.some(b => t.includes(b))) return false;               // nombres de broma conocidos
-  return !palabras.some(w => ANIMALES.includes(w));                        // palabras de animales
+  const t = norm(n), palabras = t.split(/[^a-z0-9ñ]+/).filter(Boolean);
+  if (palabras.length < 2) return false;                                                   // nombre y apellido
+  if (palabras.some(w => ANIMALES.includes(w))) return false;                              // palabras de animales
+  if (/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}️‍]/u.test(n)) return false;         // emojis
+  if (/\b(x+d+|x+p+)\b/.test(t)) return false;                                             // xd, xp, xdd...
+  const L = LISTA_NOMBRES; if (!L) return true;                                            // lista aún no cargada
+  const enLista = (arr) => arr.some(x => t.includes(norm(x)));
+  const nombres = Object.values(L.nombres).flat();
+  if (enLista(nombres) || enLista(L.localidades)) return false;
+  const pal = [].concat(...Object.values(L.palabras_prohibidas));
+  if (pal.some(p => p.includes(' ') ? t.includes(norm(p)) : palabras.includes(norm(p)))) return false;
+  const frases = [].concat(...Object.entries(L.frases_prohibidas).filter(([k]) => k !== 'regex_sugeridas').map(([, v]) => v));
+  if (frases.some(f => t.includes(norm(f)))) return false;
+  if ((L.frases_prohibidas.regex_sugeridas || []).some(r => new RegExp(r).test(t))) return false;
+  const emo = [].concat(...Object.entries(L.emoticones_prohibidos).filter(([k, v]) => Array.isArray(v) && !k.startsWith('regex')).map(([, v]) => v));
+  const low = n.toLowerCase();
+  if (emo.some(e => low.includes(e) || (/^[a-z]+$/.test(e) && palabras.includes(e)))) return false;
+  return true;
 };
 const reasonCode = m => /dozer/i.test(m) ? 'frontal' : /roca/i.test(m) ? 'roca' : /menos de \d+ m del CAEX/.test(m) ? 'caex' : /rodaste y caíste/.test(m) ? 'rajo' : /pretil/i.test(m) ? 'pretil'
   : /Choque frontal/.test(m) ? 'frontal' : /Chocaste con el camión/.test(m) ? 'choqueCaex' : /sin solicitar autorización/.test(m) ? 'sinAut' : /derecha/.test(m) ? 'lado' : /pista contraria/i.test(m) ? 'pista' : 'otro';
