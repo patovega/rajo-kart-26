@@ -125,14 +125,14 @@ body.tv .only-pc{display:none}
       let j;
       try { const r = await fetch(CFG.endpoint + (CFG.endpoint.includes('?') ? '&' : '?') + 'action=live&_=' + Date.now(), { cache: 'no-store' }); j = await r.json(); }
       catch (e) { return; }
-      if (j && Array.isArray(j.partidas)) { vivas = j.partidas; refrescarTrack(); }
+      if (j && Array.isArray(j.partidas)) { vivas = j.partidas.slice(0, 10); refrescarTrack(); }      // en el recorrido se muestran hasta 10 personas
     } catch (e) {}
   }
 
   function render() {
     const app = document.getElementById('app'); app.textContent = '';
     const all = aggregate(), arrived = all.filter(p => p.arrived).sort((a, b) => a.bestT - b.bestT), notYet = all.filter(p => !p.arrived).sort((a, b) => b.bestD - a.bestD);
-    const lost = runs.filter(r => r.o === 'P'), top = tv ? 10 : 50;
+    const lost = runs.filter(r => r.o === 'P'), top = tv ? 10 : Infinity;      // las tablas muestran a todos (en pantalla grande, 10)
     const wrap = h('div', { class: 'wrap' });
     wrap.append(h('header', null, h('div', { class: 'logo' }, '🛻'), h('div', null, h('h1', null, CFG.titulo || 'Ranking Rajo Kart 26'), h('div', { class: 'sub' }, 'Quién llega al domo, en cuánto tiempo y por qué se pierde')), h('div', { class: 'sp' }),
       h('span', { class: 'live ' + (error ? 'off' : 'on'), id: 'live' }, liveTxt()),
