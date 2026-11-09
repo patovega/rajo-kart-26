@@ -69,6 +69,7 @@ function doGet(e) {
   const p = (e && e.parameter) || {};
   if (p.action === 'list') return salida_({ ok: true, ahora: new Date().toISOString(), filas: listar_() }, p.callback);
   if (p.action === 'live') return salida_({ ok: true, ahora: Date.now(), partidas: vivas_() }, p.callback);
+  if (p.action === 'unirse') return salida_(unirse_(p), p.callback);
   return salida_({ ok: true, mensaje: 'Rajo Kart 26: el registro está activo.' }, p.callback);
 }
 function listar_() {
@@ -81,7 +82,7 @@ function listar_() {
 }
 /* Partidas en vivo: cada partida manda un latido cada ~2,5 s. Se guardan en la caché del script (no en la hoja).
    Se guardan hasta 12 partidas activas; la página elige 4 al azar. Una partida sin latidos 15 s se considera terminada. */
-const VIVO_MAX = 12, VIVO_VIGENTE_MS = 15000, VIVO_IDX_MS = 30000;
+const VIVO_MAX = 10, VIVO_VIGENTE_MS = 15000, VIVO_IDX_MS = 30000;      // 10 plazas: solo esas partidas mandan posiciones
 function vivo_(d) {
   if (TOKEN && d.token !== TOKEN) return;
   const id = String(d.id || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 20);
@@ -100,6 +101,23 @@ function vivo_(d) {
     idx.push({ id: id, ts: ahora });
     idx.sort(function (a, b) { return b.ts - a.ts; });
     cache.put('v_idx', JSON.stringify(idx.slice(0, VIVO_MAX)), 60);
+  } finally { lock.releaseLock(); }
+}
+/* Plazas para enviar posiciones: al empezar, cada partida pide una plaza. Hay 10; las demás juegan igual
+   y solo mandan su resultado al final. Una plaza se libera si su partida lleva 15 s sin latidos. */
+function unirse_(p) {
+  const id = String(p.id || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 20);
+  if (id.length < 6) return { ok: false, track: false };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(3000)) return { ok: true, track: false };
+  try {
+    const cache = CacheService.getScriptCache(), ahora = Date.now();
+    const idx = JSON.parse(cache.get('v_idx') || '[]').filter(function (x) { return ahora - x.ts < VIVO_VIGENTE_MS; });
+    if (idx.some(function (x) { return x.id === id; })) return { ok: true, track: true };
+    if (idx.length >= VIVO_MAX) return { ok: true, track: false };
+    idx.push({ id: id, ts: ahora });
+    cache.put('v_idx', JSON.stringify(idx), 60);
+    return { ok: true, track: true };
   } finally { lock.releaseLock(); }
 }
 function vivas_() {

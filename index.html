@@ -1245,9 +1245,16 @@ function rrSend(rec) {
 }
 window.addEventListener('online', rrFlush); setInterval(rrFlush, 15000); setTimeout(rrFlush, 1500);
 // Partidas en vivo: latido cada 2,5 s para la página de espectadores (no se guarda si no hay conexión)
-let liveId = '', liveT = 0;
-function liveSend() {
+let liveId = '', liveT = 0, liveOn = false, liveRetryT = 0;
+// Pide una de las 10 plazas para enviar posiciones; si no hay plaza, reintenta cada 20 s
+function liveJoin() {
+  liveOn = false; liveRetryT = 20;
   if (!RRC.endpoint || !liveId) return;
+  const url = RRC.endpoint + (RRC.endpoint.includes('?') ? '&' : '?') + 'action=unirse&id=' + encodeURIComponent(liveId) + '&n=' + encodeURIComponent(playerName) + '&_=' + Date.now();
+  fetch(url, { cache: 'no-store' }).then(r => r.json()).then(j => { liveOn = !!(j && j.track); }).catch(() => { liveOn = false; });
+}
+function liveSend() {
+  if (!RRC.endpoint || !liveId || !liveOn) return;
   const metros = Math.max(0, Math.round(Math.min(P.s, END_S) - START_S));
   const rec = { action: 'live', token: RRC.token || '', id: liveId, n: playerName, v: Math.round(P.v * 3.6), d: metros, t: Math.round(tGame * 10) / 10, r: Math.round(END_S - START_S) };
   try { fetch(RRC.endpoint, { method: 'POST', mode: 'no-cors', keepalive: true, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(rec) }).catch(() => {}); } catch (e) {}
@@ -1299,7 +1306,7 @@ function startGame() {
   if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ac = null; } }
   if (ac && ac.state === 'suspended') ac.resume();
   resetGame(); mode = 'play'; stopEngine(); startEngine();
-  liveId = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); liveT = 0;      // identificador de esta partida para la página de espectadores
+  liveId = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); liveT = 0; liveJoin();      // identificador de esta partida y plaza para enviar posiciones
   if (tilt.on && tilt.ang != null) { tilt.neutral = tilt.ang; tilt.sm = 0; }      // el celular se calibra con la posición con que empiezas
   el.ovStart.hidden = true; el.ovEnd.hidden = true; el.hud.hidden = false;
   el.radio.style.display = 'none'; camSnap = true;
@@ -1845,7 +1852,10 @@ function loop(now) {
   pollInput(); if (cal.open) calTick();
   if (mode === 'play' && !rotBlocked) step(dt);      // en vertical (celular) el juego queda en pausa
   if (mode === 'menu') { P.s = START_S; P.u = START_U0; }
-  if (mode === 'play') { liveT -= dt; if (liveT <= 0) { liveT = 4; liveSend(); } }      // latido para espectadores
+  if (mode === 'play') {      // latido cada 4 s para espectadores, solo si tiene plaza; si no, reintenta pedirla cada 20 s
+    liveT -= dt; if (liveT <= 0) { liveT = 4; liveSend(); }
+    if (!liveOn) { liveRetryT -= dt; if (liveRetryT <= 0) liveJoin(); }
+  }
   if (radarHead) radarHead.rotation.y = Math.sin(tAnim * 0.9) * 0.75;      // el radar barre de izquierda a derecha
   updateVisuals(dt); updateHud();
   if (mode === 'play') drawRadar();
