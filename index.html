@@ -638,7 +638,7 @@ berm(-12.7); berm(12.7);
   const cg = new THREE.Group();
   for (const dy of [0, -1.2]) {
     const pts = [];
-    for (let i = 0; i <= 16; i++) { const t = i / 16; pts.push(new THREE.Vector3(-14 + 28 * t, 10.4 + dy - 0.9 * (1 - Math.pow(2 * t - 1, 2)), 0)); }
+    for (let i = 0; i <= 16; i++) { const t = i / 16; pts.push(new THREE.Vector3(-14 + 28 * t, 12.0 + dy - 0.9 * (1 - Math.pow(2 * t - 1, 2)), 0)); }
     cg.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.06, 6, false), red));
   }
   cg.position.set(f.x, H(f.x, f.z), f.z); cg.rotation.y = Math.atan2(-f.rz, f.rx); scene.add(cg);
