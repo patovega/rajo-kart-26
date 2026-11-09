@@ -26,6 +26,8 @@ Controles en pantalla:
 
 ![Camión autorizado: adelanta por la derecha](imagenes/celular_autorizado.png)
 
+![Botón amarillo de solicitud de autorización, con la camioneta detrás](imagenes/solicitar_autorizacion.png)
+
 Si te acercas a menos de 20 m de un camión **sin** haber pedido autorización, pierdes.
 
 ## Cómo empieza
