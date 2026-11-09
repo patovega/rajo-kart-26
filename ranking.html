@@ -49,6 +49,15 @@ td.num{text-align:right;white-space:nowrap}
 button{font:inherit;font-weight:700;border:2px solid var(--line);border-radius:10px;padding:6px 12px;background:transparent;color:var(--fg);cursor:pointer}
 .err{background:var(--accent);color:#fff;border-radius:12px;padding:12px 14px;margin-bottom:14px}
 footer{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center}
+.track .route{position:relative;height:26px;margin:6px 8px 4px}
+.track .line{position:absolute;left:0;right:0;top:50%;height:8px;margin-top:-4px;background:var(--line);border-radius:999px}
+.track .dot{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:var(--accent);border:2px solid var(--card);box-shadow:0 0 0 2px var(--accent)}
+.segs{display:grid;grid-template-columns:repeat(6,1fr);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg{padding:8px 6px;border-right:1px solid var(--line);min-height:88px;font-size:13.5px;text-align:center;display:flex;flex-direction:column;gap:5px;align-items:center}
+.seg:last-child{border-right:0}
+.seg .lbl{font-weight:700;color:var(--muted)}
+.chip{background:var(--bg);border-radius:999px;padding:2px 8px;font-weight:700;font-size:12.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:640px){.segs{grid-template-columns:repeat(3,1fr)} .seg:nth-child(3){border-right:0}}
 /* modo pantalla grande (proyector): ?tv=1 o el botón */
 body.tv .wrap{max-width:1500px}
 body.tv{font-size:22px} body.tv h1{font-size:48px} body.tv h2{font-size:30px} body.tv .stat b{font-size:46px} body.tv .stat span{font-size:18px}
@@ -89,6 +98,34 @@ body.tv .only-pc{display:none}
   const liveTxt = () => error ? '🔴 Sin conexión' : '🟢 En vivo' + (lastOk ? ' · actualizado hace ' + hace(Date.now() - lastOk) : '');
   const table = (head, rows) => h('div', { class: 'tbl' }, h('table', null, h('thead', null, h('tr', null, ...head.map(c => h('th', { class: c[1] || '' }, c[0])))), h('tbody', null, ...rows)));
 
+  // Recorrido en la parte superior: cada punto es una partida en curso, ubicada según su avance
+  const RUTA = ['curva 1', 'rampa nor este', 'radar', 'caída de rocas', 'pala 2', 'domo'];
+  let vivas = [];
+  function buildTrack() {
+    const seg = RUTA.map(() => []), dots = [];
+    for (const p of vivas) {
+      const ruta = p.r > 0 ? p.r : 1100, pct = Math.max(0, Math.min(100, p.d / ruta * 100));
+      const k = Math.min(RUTA.length - 1, Math.floor(pct / (100 / RUTA.length)));
+      seg[k].push(p);
+      dots.push(h('span', { class: 'dot', title: p.n + ' · ' + p.d + ' m', style: 'left:' + pct.toFixed(1) + '%' }));
+    }
+    return h('section', { class: 'card track', id: 'track' },
+      h('h2', null, '🗺️ Dónde van ahora'),
+      h('p', { class: 'hint' }, 'Cada punto es una partida en curso. Se actualiza sola.'),
+      h('div', { class: 'route' }, h('div', { class: 'line' }), ...dots),
+      h('div', { class: 'segs' }, ...RUTA.map((r, i) => h('div', { class: 'seg' }, h('div', { class: 'lbl' }, r), ...seg[i].map(p => h('span', { class: 'chip' }, p.n))))));
+  }
+  function refrescarTrack() { const el = document.getElementById('track'); if (el) el.replaceWith(buildTrack()); }
+  async function cargarVivo() {
+    if (!CFG.endpoint) return;
+    try {
+      let j;
+      try { const r = await fetch(CFG.endpoint + (CFG.endpoint.includes('?') ? '&' : '?') + 'action=live&_=' + Date.now(), { cache: 'no-store' }); j = await r.json(); }
+      catch (e) { return; }
+      if (j && Array.isArray(j.partidas)) { vivas = j.partidas; refrescarTrack(); }
+    } catch (e) {}
+  }
+
   function render() {
     const app = document.getElementById('app'); app.textContent = '';
     const all = aggregate(), arrived = all.filter(p => p.arrived).sort((a, b) => a.bestT - b.bestT), notYet = all.filter(p => !p.arrived).sort((a, b) => b.bestD - a.bestD);
@@ -101,6 +138,7 @@ body.tv .only-pc{display:none}
     if (!CFG.endpoint) { wrap.append(h('div', { class: 'err' }, 'Falta configurar el ranking: pega la URL del script de Google en config.js (campo endpoint).')); app.append(wrap); return; }
     if (error && !runs.length) wrap.append(h('div', { class: 'err' }, 'No pude leer los resultados todavía (' + error + '). Reintentando…'));
     const rate = runs.length ? Math.round(runs.filter(r => r.o === 'D').length / runs.length * 100) : 0;
+    wrap.append(buildTrack());
     wrap.append(h('div', { class: 'stats' }, h('div', { class: 'stat' }, h('b', null, all.length), h('span', null, 'jugadores')), h('div', { class: 'stat' }, h('b', null, runs.length), h('span', null, 'partidas')),
       h('div', { class: 'stat' }, h('b', null, arrived.length), h('span', null, 'llegaron al domo')), h('div', { class: 'stat' }, h('b', null, rate + '%'), h('span', null, 'partidas que llegan'))));
 
@@ -157,7 +195,7 @@ body.tv .only-pc{display:none}
     } catch (e) { error = String(e && e.message || e); }
     render();
   }
-  render(); cargar();
+  render(); cargar(); cargarVivo(); setInterval(cargarVivo, 2500);
   setInterval(cargar, Math.max(3, CFG.refrescarCadaSeg || 8) * 1000);
   setInterval(() => { const e = document.getElementById('live'); if (e) e.textContent = liveTxt(); }, 1000);      // el «hace X s» corre solo, sin redibujar la página
 })();
