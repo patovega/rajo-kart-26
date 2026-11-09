@@ -641,7 +641,7 @@ berm(-12.7); berm(12.7);
   const topL = V(tL, 12.0), topR = V(tR, 12.0);
   const gL = pt(-27, -6), gR = pt(27, -6);
   for (const dy of [0, -1.0]) {
-    const left = [V(gL, 0.3 + dy), V(pt(-21, -4), 4.5 + dy), V(pt(-17, -2), 9 + dy), topL];
+    const left = [V(pt(-32, -10), 0.2 + dy), V(pt(-26, -7), 0.2 + dy), V(pt(-20, -3), 0.5 + dy), V(pt(-16, -1), 6 + dy), topL];      // viene por el piso y sube a la bandera
     const right = [topR, V(pt(17, -2), 9 + dy), V(pt(21, -4), 4.5 + dy), V(gR, 0.3 + dy)];
     for (const pts of [left, right]) scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.06, 6, false), red));
   }
