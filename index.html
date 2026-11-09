@@ -1219,10 +1219,42 @@ function nearAuth() {
   for (const t of trucks) { const d = t.s - P.s; if (d > -2 && d < 80 && t.auth && (!best || d < best.d)) best = { t, d }; }
   return best;
 }
+/* Zona de la superficie: un camión queda detenido en tu pista con las luces de freno encendidas.
+   Al autorizar, aparece un wheel dozer que retrocede hacia la pista contraria y deja un espacio entre él y el camión. */
+let zonaDoz = null;
+function buildDozer() {
+  const g = new THREE.Group(), yel = lam(0xe8b400), dk = lam(0x1d1f22), glass = lam(0x3c5a6e);
+  box(g, 2.6, 1.2, 4.0, yel, 0, 1.3, -0.4);
+  box(g, 2.0, 1.1, 1.9, glass, 0, 2.6, -1.4);
+  box(g, 3.6, 1.2, 0.35, yel, 0, 0.8, 2.6);                                  // hoja frontal
+  for (const x of [-1.6, 1.6]) for (const z of [-1.6, 1.4]) cyl(g, 0.9, 0.9, 0.8, dk, x, 0.9, z, Math.PI / 2);
+  cyl(g, 0.18, 0.18, 0.25, bas(0xffb000), 0, 3.4, -1.4);                     // baliza
+  return g;
+}
+function spawnZona() {
+  if (zonaDoz) { scene.remove(zonaDoz.mesh); zonaDoz = null; }
+  const s = L - 45, mesh = protoSame.clone(true), b = mesh.getObjectByName('beacon'); b.material = b.material.clone();
+  const bb = new THREE.Box3().setFromObject(mesh), rojo = bas(0xff2a1f);
+  for (const x of [bb.min.x * 0.7, bb.max.x * 0.7]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.12), rojo); l.position.set(x, bb.max.y * 0.45, bb.min.z - 0.05); mesh.add(l); }
+  scene.add(mesh); addPlates(mesh, 777, CAEX_PLATE.f, CAEX_PLATE.r);
+  trucks.push({ id: 777, s, u: -LANE, v: 0, v0: 0, vInit: false, mesh, beacon: b, auth: false, passed: false, prevD: s - P.s, zona: true });
+}
+function startDozer(t) {      // al autorizar: el dozer aparece delante del camión y retrocede hacia la pista contraria
+  zonaDoz = { mesh: buildDozer(), t: 0, s0: t.s + 30, s1: t.s + 16 };
+  scene.add(zonaDoz.mesh);
+}
+function stepDozer(dt) {
+  const z = zonaDoz; if (!z) return;
+  z.t += dt; const k = Math.min(1, z.t / 4), e = k * k * (3 - 2 * k);
+  const s = z.s0 + (z.s1 - z.s0) * e, u = -LANE + 2 * LANE * e;
+  place(z.mesh, s, u, -1, 0);
+  if (Math.abs(s - P.s) < 4.4 && Math.abs(u - P.u) < 2.8) return endGame(false, 'Chocaste con un wheel dozer que retrocedía.');
+}
 function requestAuth() {
   if (mode !== 'play') return;
   const tg = findTarget(); if (!tg) return;
   const t = tg.t; t.auth = true;
+  if (t.zona) startDozer(t);
   beep(520, 0.08, 'square', 0.04); beep(780, 0.1, 'square', 0.04, 0.1);
   showRadio('<b>Tú</b>: Solicito autorización para adelantar a CAEX-' + pad(t.id) + '.');
   setTimeout(() => {
@@ -1265,7 +1297,7 @@ function stepArrival(dt) {      // tramo final automático: sigue por la superfi
 }
 let playerName = '';
 const cleanName = v => v.replace(/[|\[\]<>\r\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 20);
-const reasonCode = m => /roca/i.test(m) ? 'roca' : /menos de \d+ m del CAEX/.test(m) ? 'caex' : /rodaste y caíste/.test(m) ? 'rajo' : /pretil/i.test(m) ? 'pretil'
+const reasonCode = m => /dozer/i.test(m) ? 'frontal' : /roca/i.test(m) ? 'roca' : /menos de \d+ m del CAEX/.test(m) ? 'caex' : /rodaste y caíste/.test(m) ? 'rajo' : /pretil/i.test(m) ? 'pretil'
   : /Choque frontal/.test(m) ? 'frontal' : /Chocaste con el camión/.test(m) ? 'choqueCaex' : /sin solicitar autorización/.test(m) ? 'sinAut' : /derecha/.test(m) ? 'lado' : /pista contraria/i.test(m) ? 'pista' : 'otro';
 /* Registro automático de cada partida (ganada o perdida) en la hoja de Google que configuraste en config.js */
 const RRC = window.RR_CONFIG || {}, RR_Q = 'rajoRojo.pendientes';
@@ -1352,7 +1384,7 @@ function endGame(win, msg) {
 function startGame() {
   if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ac = null; } }
   if (ac && ac.state === 'suspended') ac.resume();
-  resetGame(); mode = 'play'; stopEngine(); startEngine();
+  resetGame(); spawnZona(); mode = 'play'; stopEngine(); startEngine();
   liveId = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); liveT = 0; liveJoin();      // identificador de esta partida y plaza para enviar posiciones
   if (tilt.on && tilt.ang != null) { tilt.neutral = tilt.ang; tilt.sm = 0; }      // el celular se calibra con la posición con que empiezas
   el.ovStart.hidden = true; el.ovEnd.hidden = true; el.hud.hidden = false;
@@ -1633,6 +1665,7 @@ function updateRocks(dt) {
 /* ───────────── Simulación ───────────── */
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 function step(dt) {
+  stepDozer(dt);
   if (arrive) { stepArrival(dt); return; }      // llegó a la meta: la camioneta sigue sola hasta el domo
   tGame += dt;
 
