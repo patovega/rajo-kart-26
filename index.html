@@ -1254,6 +1254,7 @@ function stepDozer(dt) {
   const z = zonaDoz; if (!z) return;
   z.t += dt; const k = Math.min(1, z.t / 4), e = k * k * (3 - 2 * k);
   const s = z.s0 + (z.s1 - z.s0) * e, u = -LANE + 2 * LANE * e;
+  z.cs = s; z.cu = u;      // posición actual del dozer, para el tráfico de frente
   const f = frame(s), x = f.x + f.rx * u, zz = f.z + f.rz * u, y = H(x, zz) + 0.1;
   z.mesh.position.set(x, y, zz);
   z.mesh.lookAt(x + f.rx * 10, y, zz + f.rz * 10);      // frente hacia la derecha de la pista
@@ -1695,6 +1696,8 @@ function step(dt) {
   for (let i = 0; i < oncs.length; i++) {
     const o = oncs[i], lead = oncs[i - 1]; let v = o.v0;
     if (lead && o.s - lead.s < 34) v = Math.min(v, lead.v);
+    const zd = zonaDoz;      // con el dozer ya en la pista derecha, el camión de frente frena antes de llegar a él
+    if (zd && zd.t >= 4 && Math.abs(o.u - zd.cu) < 6 && o.s > zd.cs && o.s - zd.cs < 110) v = Math.min(v, Math.max(0, (o.s - zd.cs - 10) * 0.4));
     o.v = v; const prev = o.s; o.s -= v * dt;
     if (o.kind === 'aljibe') { o.cyc += dt; o.spraying = (o.cyc % 20) < 10; if (o.spraying) wetRange(o.s + 7, prev + 7); }   // riega 10 s, descansa 10 s
   }
