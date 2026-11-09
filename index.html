@@ -187,7 +187,7 @@ body.tilt-on #wheel{left:calc(12px + env(safe-area-inset-left,0px));right:auto;b
     <p class="sub">Sube desde el fondo del rajo, pasa junto a la pala de cables y llega a la superficie. El recorrido dura entre uno y dos minutos.</p>
     <label class="nm" for="pname">Tu nombre (obligatorio)</label>
     <input id="pname" type="text" maxlength="20" autocomplete="off" placeholder="Nombre y apellido">
-    <div class="nerr" id="nameErr" hidden>Escribe tu nombre (mínimo 2 letras) para poder jugar.</div>
+    <div class="nerr" id="nameErr" hidden>Escribe tu nombre y apellido (sin nombres de broma ni de animales) para poder jugar.</div>
     <div class="sub2">Tu nombre y el resultado de cada partida, ganada o perdida, quedan registrados en el <a href="ranking.html" target="_blank" rel="noopener">ranking en vivo</a>.</div>
     <div id="ctlInfo">Control: teclado o pantalla táctil.</div>
     <button class="btn2" id="wheelBtn" type="button">🎮 Configurar volante o control</button>
@@ -1313,6 +1313,16 @@ function stepArrival(dt) {      // tramo final automático: sigue por la superfi
 }
 let playerName = '';
 const cleanName = v => v.replace(/[|\[\]<>\r\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 20);
+// Filtro de nombres: nombre y apellido, sin nombres de broma y sin palabras de animales (el apellido "León" sí se permite)
+const NOMBRES_BROMA = ['benito camelo', 'melosoba', 'rosamel fierro', 'juan sin nombre', 'pepito grillo', 'pancho perez', 'nn', 'xxx', 'asdf', 'test', 'prueba'];
+const ANIMALES = ['perro','perra','gato','gata','vaca','toro','cerdo','cerda','chancho','cabra','oveja','caballo','burro','mula','gallina','gallo','pato','pavo','conejo','raton','rata','lobo','zorro','oso','osa','tigre','elefante','jirafa','mono','gorila','cebra','hipopotamo','rinoceronte','ballena','delfin','tiburon','pez','sapo','rana','lagarto','lagartija','cocodrilo','serpiente','culebra','vibora','aguila','buho','paloma','loro','perico','gorrion','pajaro','ardilla','castor','nutria','foca','morsa','pinguino','camello','llama','alpaca','vicuna','pollo','hormiga','abeja','mosca','arana','mariposa','grillo','escarabajo','pulga','piojo','gusano','caracol','zancudo','mosquito','cucaracha','pulpo','calamar','medusa','cangrejo','langosta','tortuga','iguana','camaleon','dragon','topo','erizo','puma','jaguar','pantera','hiena','chacal','coyote','bisonte','bufalo','antilope','ciervo','venado','alce','reno','cuervo','buitre','halcon','gaviota','tucan','pitbull','bulldog'];
+const sinTildes = t => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const nombreValido = n => {
+  const t = sinTildes(n), palabras = t.split(' ').filter(Boolean);
+  if (palabras.length < 2) return false;                                  // nombre y apellido
+  if (NOMBRES_BROMA.some(b => t.includes(b))) return false;               // nombres de broma conocidos
+  return !palabras.some(w => ANIMALES.includes(w));                        // palabras de animales
+};
 const reasonCode = m => /dozer/i.test(m) ? 'frontal' : /roca/i.test(m) ? 'roca' : /menos de \d+ m del CAEX/.test(m) ? 'caex' : /rodaste y caíste/.test(m) ? 'rajo' : /pretil/i.test(m) ? 'pretil'
   : /Choque frontal/.test(m) ? 'frontal' : /Chocaste con el camión/.test(m) ? 'choqueCaex' : /sin solicitar autorización/.test(m) ? 'sinAut' : /derecha/.test(m) ? 'lado' : /pista contraria/i.test(m) ? 'pista' : 'otro';
 /* Registro automático de cada partida (ganada o perdida) en la hoja de Google que configuraste en config.js */
@@ -1381,10 +1391,10 @@ function horizontal() {      // en el celular: pantalla completa y bloqueo en ho
 }
 function tryStart() {      // el nombre es obligatorio para jugar
   const n = cleanName($('pname').value);
-  if (n.length < 2) { $('nameErr').hidden = false; $('pname').focus(); return; }
+  if (!nombreValido(n)) { $('nameErr').hidden = false; $('pname').focus(); return; }
   $('nameErr').hidden = true; playerName = n; horizontal(); launch();
 }
-$('pname').addEventListener('input', () => { if (cleanName($('pname').value).length >= 2) $('nameErr').hidden = true; });
+$('pname').addEventListener('input', () => { if (nombreValido(cleanName($('pname').value))) $('nameErr').hidden = true; });
 $('chgName').addEventListener('click', () => { resetGame(); mode = 'menu'; stopEngine(); el.ovEnd.hidden = true; el.ovStart.hidden = false; el.hud.hidden = true; $('pname').focus(); });
 let pendingShot = false;      // se toma la captura del choque en el siguiente cuadro
 function signOf(m) {         // señal de la regla incumplida
