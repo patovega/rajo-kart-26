@@ -1417,7 +1417,7 @@ function endGame(win, msg) {
 function startGame() {
   if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ac = null; } }
   if (ac && ac.state === 'suspended') ac.resume();
-  resetGame(); spawnZona(); mode = 'play'; stopEngine(); startEngine();
+  resetGame(); spawnZona(); overT = 0; mode = 'play'; stopEngine(); startEngine();
   liveId = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); liveT = 0; liveJoin();      // identificador de esta partida y plaza para enviar posiciones
   if (tilt.on && tilt.ang != null) { tilt.neutral = tilt.ang; tilt.sm = 0; }      // el celular se calibra con la posición con que empiezas
   el.ovStart.hidden = true; el.ovEnd.hidden = true; el.hud.hidden = false;
@@ -1697,8 +1697,11 @@ function updateRocks(dt) {
 
 /* ───────────── Simulación ───────────── */
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+let overT = 0;      // segundos seguidos por encima del límite de velocidad
 function step(dt) {
   stepDozer(dt);
+  if (P.v * 3.6 > SPEED_LIMIT) { overT += dt; if (overT >= 5) return endGame(false, 'Superaste el límite de 60 km/h por más de 5 segundos.'); }
+  else overT = 0;
   if (arrive) { stepArrival(dt); return; }      // llegó a la meta: la camioneta sigue sola hasta el domo
   tGame += dt;
 
