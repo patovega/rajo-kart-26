@@ -17,6 +17,10 @@ Vas a conducir una camioneta por el rajo de la mina, desde el fondo hasta la sup
 | Girar | ← → | volante o mando |
 | Pedir autorización para adelantar | 0 o Espacio | botón en pantalla o botón del volante |
 
+> **Importante:**
+> - **La camioneta acelera sola** hasta 50 km/h. No necesitas mantener ↑ para ir a crucero.
+> - **No tiene reversa.** ↓ solo frena: si te detienes, no puedes retroceder.
+
 En celular hay que girarlo a horizontal. Si usas volante USB, puedes calibrarlo desde el menú de inicio.
 
 ## Velocidad
