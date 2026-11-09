@@ -1307,6 +1307,7 @@ const norm = t => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().repla
 const nombreValido = n => {
   const t = norm(n), palabras = t.split(/[^a-z0-9ñ]+/).filter(Boolean);
   if (palabras.length < 2) return false;                                                   // nombre y apellido
+  if (t.replace(/\s/g, '').length < 5) return false;                                       // menos de 5 letras
   if (palabras.some(w => ANIMALES.includes(w))) return false;                              // palabras de animales
   if (/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}️‍]/u.test(n)) return false;         // emojis
   if (/\b(x+d+|x+p+)\b/.test(t)) return false;                                             // xd, xp, xdd...
@@ -1315,7 +1316,7 @@ const nombreValido = n => {
   const nombres = Object.values(L.nombres).flat();
   if (enLista(nombres) || enLista(L.localidades)) return false;
   const pal = [].concat(...Object.values(L.palabras_prohibidas));
-  if (pal.some(p => p.includes(' ') ? t.includes(norm(p)) : palabras.includes(norm(p)))) return false;
+  if (pal.some(p => p.includes(' ') || norm(p).length >= 4 ? t.includes(norm(p)) : palabras.includes(norm(p)))) return false;      // 4 letras o más: dentro del nombre; 3 o menos: palabra completa
   const frases = [].concat(...Object.entries(L.frases_prohibidas).filter(([k]) => k !== 'regex_sugeridas').map(([, v]) => v));
   if (frases.some(f => t.includes(norm(f)))) return false;
   if ((L.frases_prohibidas.regex_sugeridas || []).some(r => new RegExp(r).test(t))) return false;
@@ -1392,7 +1393,11 @@ function horizontal() {      // en el celular: pantalla completa y bloqueo en ho
 }
 function tryStart() {      // el nombre es obligatorio para jugar
   const n = cleanName($('pname').value);
-  if (!nombreValido(n)) { $('nameErr').hidden = false; $('pname').focus(); return; }
+  if (!nombreValido(n)) {
+    const falta = norm(n).split(/[^a-z0-9ñ]+/).filter(Boolean).length < 2;
+    $('nameErr').textContent = falta ? 'Escribe tu nombre y apellido para poder jugar.' : '🤔 Esto no parece un nombre';
+    $('nameErr').hidden = false; $('pname').focus(); return;
+  }
   $('nameErr').hidden = true; playerName = n; horizontal(); launch();
 }
 $('pname').addEventListener('input', () => { if (nombreValido(cleanName($('pname').value))) $('nameErr').hidden = true; });
