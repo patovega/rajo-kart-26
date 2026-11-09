@@ -62,6 +62,9 @@ footer{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center}
 .lane .ln{position:relative;height:32px}
 .lane .ln::before{content:'';position:absolute;left:0;right:0;top:50%;height:4px;margin-top:-2px;background:var(--line);border-radius:999px}
 .truck{position:absolute;top:50%;transform:translate(-50%,-50%) scaleX(-1);font-size:24px;line-height:1;transition:left 1.2s linear}
+.celebra{position:fixed;left:50%;transform:translateX(-50%);background:var(--card);border:2px solid var(--accent);border-radius:999px;padding:8px 18px;font-weight:800;z-index:1000;white-space:nowrap;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.spin{display:inline-block;animation:spin360 1.2s linear infinite;transform-style:preserve-3d}
+@keyframes spin360{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}
 .foot .seg{min-height:0;padding:6px 4px}
 @media (max-width:640px){.lane,.foot{grid-template-columns:100px 1fr}}
 .seg .lbl{font-weight:700;color:var(--muted)}
@@ -183,6 +186,35 @@ body.tv .only-pc{display:none}
     if (!j || !Array.isArray(j.filas)) throw new Error('respuesta inesperada');
     runs = j.filas.map(f => ({ id: f.id, n: String(f.n), o: f.r === 'LLEGÓ' ? 'D' : 'P', t: Number(f.t), d: Number(f.d), w: f.w || '', dev: f.dev || '', ts: Date.parse(f.f) || Date.now() }));
     lastOk = Date.now(); error = '';
+    // cotillón y camioneta girando cuando alguien llega al domo (la primera carga no celebra llegadas viejas)
+    const llegadas = runs.filter(r => r.o === 'D');
+    if (vistasLlegadas === null) vistasLlegadas = new Set(llegadas.map(r => r.id));
+    else {
+      const nuevas = llegadas.filter(r => !vistasLlegadas.has(r.id));
+      nuevas.forEach(r => vistasLlegadas.add(r.id));
+      if (nuevas.length) celebrar(nuevas);
+    }
+  }
+  let vistasLlegadas = null;
+  function cotillon() {
+    const c = document.createElement('canvas'); c.width = innerWidth; c.height = innerHeight;
+    c.style.cssText = 'position:fixed;left:0;top:0;pointer-events:none;z-index:999';
+    document.body.append(c); const x = c.getContext('2d');
+    const cols = ['#c9141c', '#e3a008', '#1f9d55', '#2f80ed', '#e05cb8', '#ffffff'];
+    const ps = Array.from({ length: 170 }, () => ({ x: c.width / 2 + (Math.random() - 0.5) * 220, y: c.height * 0.7, vx: (Math.random() - 0.5) * 16, vy: -(Math.random() * 18 + 6), r: Math.random() * 6 + 4, c: cols[Math.floor(Math.random() * cols.length)], a: Math.random() * 6, va: (Math.random() - 0.5) * 0.3 }));
+    const t0 = performance.now();
+    (function frame(now) {
+      x.clearRect(0, 0, c.width, c.height);
+      for (const p of ps) { p.vy += 0.35; p.vx *= 0.99; p.x += p.vx; p.y += p.vy; p.a += p.va; x.save(); x.translate(p.x, p.y); x.rotate(p.a); x.fillStyle = p.c; x.fillRect(-p.r / 2, -p.r / 4, p.r, p.r / 2); x.restore(); }
+      if (now - t0 < 3200) requestAnimationFrame(frame); else c.remove();
+    })(t0);
+  }
+  function celebrar(nuevas) {
+    cotillon();
+    nuevas.slice(0, 3).forEach((r, i) => {
+      const b = h('div', { class: 'celebra', style: 'top:' + (12 + i * 50) + 'px' }, h('span', { class: 'spin' }, '🛻'), ' ' + r.n + ' llegó al domo en ' + fmtT(r.t));
+      document.body.append(b); setTimeout(() => b.remove(), 6000);
+    });
   }
   let cbN = 0;
   function jsonp() {      // plan B si el navegador no deja leer con fetch (CORS)
