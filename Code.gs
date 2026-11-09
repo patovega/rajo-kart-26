@@ -70,6 +70,7 @@ function doGet(e) {
   if (p.action === 'list') return salida_({ ok: true, ahora: new Date().toISOString(), filas: listar_() }, p.callback);
   if (p.action === 'live') return salida_({ ok: true, ahora: Date.now(), partidas: vivas_() }, p.callback);
   if (p.action === 'unirse') return salida_(unirse_(p), p.callback);
+  if (p.action === 'vaciar') return salida_(vaciar_(p.clave), p.callback);
   return salida_({ ok: true, mensaje: 'Rajo Kart 26: el registro está activo.' }, p.callback);
 }
 function listar_() {
@@ -129,6 +130,24 @@ function vivas_() {
     if (ahora - p.ts < VIVO_VIGENTE_MS) out.push(p);
   });
   return out.slice(0, VIVO_MAX);
+}
+/* Empezar un evento nuevo desde la página: pide la clave del organizador (propiedad CLAVE_VACIAR del script),
+   guarda una copia de los resultados y deja el ranking en cero. */
+function vaciar_(clave) {
+  const esperada = PropertiesService.getScriptProperties().getProperty('CLAVE_VACIAR');
+  if (!esperada || String(clave || '') !== esperada) return { ok: false, mensaje: 'clave incorrecta' };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return { ok: false, mensaje: 'el servidor está ocupado, intenta de nuevo' };
+  try {
+    const sh = hoja_(), n = sh.getLastRow();
+    if (n >= 2) {
+      const copia = sh.copyTo(libro_());
+      copia.setName('Copia ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH.mm'));
+      sh.deleteRows(2, n - 1);
+    }
+    CacheService.getScriptCache().removeAll(['v_idx']);
+    return { ok: true, mensaje: 'ranking en cero' };
+  } finally { lock.releaseLock(); }
 }
 function texto_(s) { return ContentService.createTextOutput(s); }
 function salida_(obj, cb) {

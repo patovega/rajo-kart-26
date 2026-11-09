@@ -149,7 +149,7 @@ body.tv .only-pc{display:none}
     wrap.append(h('header', null, h('div', { class: 'logo' }, '🛻'), h('div', null, h('h1', null, CFG.titulo || 'Ranking Rajo Kart 26'), h('div', { class: 'sub' }, 'Quién llega al domo, en cuánto tiempo y por qué se pierde')), h('div', { class: 'sp' }),
       h('span', { class: 'live ' + (error ? 'off' : 'on'), id: 'live' }, liveTxt()),
       h('button', { class: 'only-pc', onclick: () => { tv = !tv; document.body.classList.toggle('tv', tv); render(); } }, tv ? 'Vista normal' : 'Pantalla grande'),
-      h('button', { class: 'only-pc', onclick: descargar }, 'CSV')));
+      h('button', { class: 'only-pc', onclick: descargar }, 'CSV'), h('button', { onclick: vaciarRanking }, 'Evento nuevo')));
     if (!CFG.endpoint) { wrap.append(h('div', { class: 'err' }, 'Falta configurar el ranking: pega la URL del script de Google en config.js (campo endpoint).')); app.append(wrap); return; }
     if (error && !runs.length) wrap.append(h('div', { class: 'err' }, 'No pude leer los resultados todavía (' + error + '). Reintentando…'));
     const rate = runs.length ? Math.round(runs.filter(r => r.o === 'D').length / runs.length * 100) : 0;
@@ -178,6 +178,19 @@ body.tv .only-pc{display:none}
     else { wrap.append(c1); if (c2) wrap.append(c2); wrap.append(c3, c4); }
     wrap.append(h('footer', null, 'Se actualiza sola cada ' + (CFG.refrescarCadaSeg || 8) + ' s · los datos vienen de la hoja de Google del organizador'));
     app.append(wrap);
+  }
+
+  // Empezar un evento nuevo: pide la clave del organizador (no está escrita en esta página)
+  async function vaciarRanking() {
+    if (!CFG.endpoint) return;
+    const clave = prompt('Clave del organizador para empezar un evento nuevo:'); if (!clave) return;
+    if (!confirm('Se guarda una copia de los resultados y el ranking queda en cero. ¿Seguro?')) return;
+    try {
+      const r = await fetch(CFG.endpoint + (CFG.endpoint.includes('?') ? '&' : '?') + 'action=vaciar&clave=' + encodeURIComponent(clave) + '&_=' + Date.now(), { cache: 'no-store' });
+      const j = await r.json();
+      alert(j.ok ? 'Listo: el ranking quedó en cero.' : 'No se pudo: ' + j.mensaje);
+      if (j.ok) cargar();
+    } catch (e) { alert('Sin conexión con el servidor.'); }
   }
 
   function descargar() {
