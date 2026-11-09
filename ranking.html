@@ -65,9 +65,9 @@ body.tv .only-pc{display:none}
   'use strict';
   const CFG = window.RR_CONFIG || {};
   const REASONS = {
-    roca: ['🚧', 'Chocó con una roca'], camote: ['🚧', 'Chocó con una roca'], caex: ['🚛', 'Se acercó a menos de 20 m de un CAEX'], choqueCaex: ['💥', 'Chocó con un CAEX'],
-    frontal: ['⚠️', 'Choque frontal'], pretil: ['🧱', 'Choque contra el pretil'], rajo: ['⛰️', 'Cayó al rajo'], sinAut: ['📻', 'Adelantó sin autorización'],
-    lado: ['↔️', 'Adelantó por el lado equivocado'], pista: ['🚫', 'Pista contraria sin motivo'], otro: ['❔', 'Otro motivo']
+    roca: ['🚧', 'Chocaron con una roca'], camote: ['🚧', 'Chocaron con una roca'], caex: ['🚛', 'Se acercaron a menos de 20 m de un CAEX'], choqueCaex: ['💥', 'Chocaron con un CAEX'],
+    frontal: ['⚠️', 'Choque frontal'], pretil: ['🧱', 'Chocaron con el pretil'], rajo: ['⛰️', 'Se cayeron al rajo'], sinAut: ['📻', 'Adelantaron sin autorización'],
+    lado: ['↔️', 'Adelantaron por la izquierda'], pista: ['🚫', 'Se fueron a la pista contraria sin motivo'], otro: ['❔', 'Otro motivo']
   };
   const MEDAL = ['🥇', '🥈', '🥉'];
   const fmtT = s => { const m = Math.floor(s / 60), r = s - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); };
