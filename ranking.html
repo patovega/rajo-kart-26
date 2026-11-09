@@ -113,7 +113,7 @@ body.tv .only-pc{display:none}
       dots.push(h('span', { class: 'dot', title: p.n + ' · ' + p.d + ' m', style: 'left:' + pct.toFixed(1) + '%' }));
     }
     return h('section', { class: 'card track', id: 'track' },
-      h('h2', null, '🗺️ Dónde van ahora'),
+      h('h2', null, '🗺️ Siguiendo a 10 jugadores'),
       h('p', { class: 'hint' }, 'Cada punto es una partida en curso. Se actualiza sola.'),
       h('div', { class: 'route' }, h('div', { class: 'line' }), ...dots),
       h('div', { class: 'segs' }, ...RUTA.map((r, i) => h('div', { class: 'seg' }, h('div', { class: 'lbl' }, r), perdidas[i].length ? h('div', { class: 'triste', title: perdidas[i].join(', ') }, '😢 ' + perdidas[i].length) : null, ...seg[i].map(p => h('span', { class: 'chip' }, p.n))))));
