@@ -6,7 +6,7 @@ Vas a conducir una camioneta por el rajo de la mina, desde el fondo hasta la sup
 
 Juega con el celular **horizontal**. Si lo tienes vertical, el juego se pausa y te pide girarlo.
 
-![Pantalla de inicio en el celular](imagenes/celular_inicio.png)
+![Pantalla de inicio en el celular](https://raw.githubusercontent.com/patovega/rajo-kart-26/main/imagenes/celular_inicio.png)
 
 Controles en pantalla:
 
@@ -14,7 +14,7 @@ Controles en pantalla:
 - **▲ Acelerar** y **▼ Frenar** (abajo a la derecha).
 - **Solicitar autorización** (a la derecha, arriba de los botones): aparece cuando hay un camión a menos de 55 m. Te dice qué CAEX es y a cuántos metros está.
 
-![Camión cerca, con el botón de autorización activo](imagenes/celular_camion_cerca.png)
+![Camión cerca, con el botón de autorización activo](https://raw.githubusercontent.com/patovega/rajo-kart-26/main/imagenes/celular_camion_cerca.png)
 
 ## Pedir autorización al CAEX
 
@@ -24,7 +24,7 @@ Controles en pantalla:
 4. El camión frena poco a poco. Pasa por su derecha, usando la pista contraria.
 5. Cuando lo hayas pasado, vuelve a tu pista.
 
-![Camión autorizado: adelanta por la derecha](imagenes/celular_autorizado.png)
+![Camión autorizado: adelanta por la derecha](https://raw.githubusercontent.com/patovega/rajo-kart-26/main/imagenes/celular_autorizado.png)
 
 Si te acercas a menos de 20 m de un camión **sin** haber pedido autorización, pierdes.
 
