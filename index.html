@@ -710,7 +710,29 @@ let radarHead = null;   // cabeza giratoria del radar: se mueve de izquierda a d
   cyl(tw, 0.04, 0.04, 1.5, steel, 0, TH + 0.85, 0);                        // mástil
   box(tw, 0.06, 2.2, 1.8, steel, 0, TH - 1.2, 0.95); box(tw, 0.06, 2.2, 1.8, steel, 0, TH - 1.2, -0.95);   // paneles
   const tf = frame(RAD.s + 10), tX = tf.x + tf.rx * (RAD.side * 22), tZ = tf.z + tf.rz * (RAD.side * 22);
-  tw.position.set(tX, H(tX, tZ), tZ); tw.rotation.y = Math.atan2(-tf.rz, tf.rx); scene.add(tw);      // la antena mira hacia el otro lado (opuesto al centro del rajo); el barrido la mueve a los lados
+  tw.position.set(tX, H(tX, tZ), tZ); tw.rotation.y = Math.atan2(-tf.rz, tf.rx); scene.add(tw);
+  // caseta de control, valla amarilla, conos y letrero, como en el área de radar de la foto
+  const cs = f, cux = f.x + f.tx * (-12) + f.rx * (-17), cuz = f.z + f.tz * (-12) + f.rz * (-17);      // 12 m detrás del radar, un poco más cerca del camino
+  const caseta = new THREE.Group(), vidrio = lam(0x3c5a6e);
+  box(caseta, 2.4, 2.2, 2.4, white, 0, 1.1, 0);
+  box(caseta, 1.7, 0.9, 0.06, vidrio, 0, 1.4, 1.22);
+  box(caseta, 2.6, 0.12, 2.6, grey, 0, 2.26, 0);
+  caseta.position.set(cux, H(cux, cuz), cuz); caseta.rotation.y = Math.atan2(-cs.rz, cs.rx); scene.add(caseta);
+  const vs = frame(RAD.s - 4), vx = vs.x + vs.rx * (-26.3), vz = vs.z + vs.rz * (-26.3);
+  const valla = new THREE.Group(), yel = lam(0xf2b800);
+  for (let z = -6; z <= 6; z += 2) box(valla, 0.1, 1.1, 0.1, yel, 0, 0.55, z);
+  box(valla, 0.08, 0.08, 12, yel, 0, 0.6, 0); box(valla, 0.08, 0.08, 12, yel, 0, 1.0, 0);
+  valla.position.set(vx, H(vx, vz), vz); valla.rotation.y = Math.atan2(-vs.rz, vs.rx); scene.add(valla);
+  cone(RAD.s + 6, -26); cone(RAD.s - 6, -26.5); cone(RAD.s + 14, -17);
+  const sc = document.createElement('canvas'); sc.width = 256; sc.height = 128; const sx = sc.getContext('2d');
+  sx.fillStyle = '#f7f7f5'; sx.fillRect(0, 0, 256, 128); sx.strokeStyle = '#1b1b18'; sx.lineWidth = 8; sx.strokeRect(4, 4, 248, 120);
+  sx.fillStyle = '#1b1b18'; sx.font = '800 56px Arial, sans-serif'; sx.textAlign = 'center'; sx.textBaseline = 'middle'; sx.fillText('RADAR', 128, 66);
+  const sign = new THREE.Group();
+  const panel = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.6), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc), side: THREE.DoubleSide }));
+  panel.position.set(0, 2.1, 0); sign.add(panel);
+  box(sign, 0.12, 2.1, 0.12, grey, -1.2, 1.05, 0); box(sign, 0.12, 2.1, 0.12, grey, 1.2, 1.05, 0);
+  const ls = frame(RAD.s + 16), lx = ls.x + ls.rx * (-14), lz = ls.z + ls.rz * (-14);
+  sign.position.set(lx, H(lx, lz), lz); sign.rotation.y = Math.atan2(-ls.rz, ls.rx); scene.add(sign);      // la antena mira hacia el otro lado (opuesto al centro del rajo); el barrido la mueve a los lados
 })();
 
 /* ───────────── Vehículos ───────────── */
