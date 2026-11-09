@@ -188,26 +188,12 @@ body.tilt-on #wheel{left:calc(12px + env(safe-area-inset-left,0px));right:auto;b
     <label class="nm" for="pname">Tu nombre (obligatorio)</label>
     <input id="pname" type="text" maxlength="20" autocomplete="off" placeholder="Nombre y apellido">
     <div class="nerr" id="nameErr" hidden>Escribe tu nombre y apellido (sin nombres de broma ni de animales) para poder jugar.</div>
-    <div class="sub2">Tu nombre y el resultado de cada partida, ganada o perdida, quedan registrados en el <a href="ranking.html" target="_blank" rel="noopener">ranking en vivo</a>.</div>
     <div id="ctlInfo">Control: teclado o pantalla táctil.</div>
     <button class="btn2" id="wheelBtn" type="button" hidden>🎮 Configurar volante o control</button>
     <button class="btn2 tc2" id="vwBtn" type="button">🕹 Volante en pantalla: no</button>
     <button class="btn2 tc2" id="tiltBtn" type="button">📱 Inclinar el celular como volante: no</button>
     <button class="btn2 tc2" id="tiltCal" type="button">Calibrar</button>
     <button class="btn2 tc2" id="tiltInv" type="button">Invertir giro</button><br>
-    <ul>
-      <li>Límite 60 km/h: si lo pasas suena la alarma. Velocidad máxima 80 km/h.</li>
-      <li>Con piso mojado (donde pasó el aljibe) hay menos agarre: la dirección responde lenta, la camioneta se patina y frena menos. Baja la velocidad.</li>
-      <li class="kb">La camioneta acelera sola hasta 50 km/h; mantén ↑ para llegar hasta 80. Flechas ← → giran, ↓ frena y la tecla 0 o la barra espaciadora piden autorización.</li>
-      <li class="tc">En el celular: gira con el pulgar el volante de la esquina izquierda; ▲ acelera hasta 80 (sola llega a 50) y ▼ frena. El botón amarillo pide autorización. Se juega en horizontal.</li>
-      <li>El rajo es de doble vía y se circula por la izquierda.</li>
-      <li>Solo se adelanta por la derecha, usando la pista contraria. Mira el radar.</li>
-      <li>Mantén al menos 20 m de distancia con el CAEX que va adelante; si te acercas más, pierdes. Con autorización de adelantamiento ya no rige esa distancia.</li>
-      <li>Si hay una roca en la pista, esquívala por la derecha o por la izquierda, con ojo en el pretil izquierdo. Si lo tocas, pierdes.</li>
-      <li>A mitad de camino hay una zona de caída de rocas: caen tres rocas en zigzag. Esquívalas una a una.</li>
-      <li>Detrás de un camión, pide autorización por radio. Siempre te dirán que sí: el camión se detiene de a poco y vuelve a andar cuando lo adelantas.</li>
-      <li>Adelantar sin autorización termina el juego. Chocar, rozar las bermas o andar por la pista contraria sin motivo también.</li>
-    </ul>
     <button class="btn" id="goBtn" type="button">Comenzar</button>
   </div>
 </div>
@@ -249,7 +235,7 @@ body.tilt-on #wheel{left:calc(12px + env(safe-area-inset-left,0px));right:auto;b
       <button class="btn2" id="resCopy" type="button">📋 Copiar resultado</button>
       <button class="btn2" id="resShare" type="button" hidden>📤 Compartir</button>
       <div class="sub2" id="sendSt">Registrando resultado…</div>
-      <div class="sub2">Respaldo: si no se registra solo, copia el texto y mándaselo al organizador. <a href="ranking.html" target="_blank" rel="noopener">Ver el ranking</a></div>
+      <div class="sub2">Respaldo: si no se registra solo, copia el texto y mándaselo al organizador.</div>
     </div>
     <button class="btn" id="retryBtn" type="button">Reintentar (R)</button>
     <button class="btn2" id="chgName" type="button" style="display:none!important">Cambiar nombre</button>
