@@ -112,8 +112,8 @@ body.tv .only-pc{display:none}
   const table = (head, rows) => h('div', { class: 'tbl' }, h('table', null, h('thead', null, h('tr', null, ...head.map(c => h('th', { class: c[1] || '' }, c[0])))), h('tbody', null, ...rows)));
 
   // Recorrido en la parte superior: cada punto es una partida en curso, ubicada según su avance
-  const RUTA = ['curva 1', 'rampa nor este', 'radar', 'caída de rocas', 'pala 2', 'domo'];
-  const ICONOS = { 'rampa nor este': '📡', 'caída de rocas': '🪨', 'pala 2': '🚜', 'domo': '🏁' };
+  const RUTA = ['curva 1', 'rampa', 'caída de rocas', 'pala 2', 'domo'];
+  const ICONOS = { 'rampa': '📡', 'caída de rocas': '🪨', 'pala 2': '🚜', 'domo': '🏁' };
   let vivas = [];
   function buildTrack() {
     const perdidas = RUTA.map(() => []);      // partidas perdidas en cada tramo, según los metros donde se cayeron

@@ -611,22 +611,6 @@ berm(-12.7); berm(12.7);
   scene.add(im);
 })();
 
-(() => { // rocas sueltas en las caras de los bancos y en el fondo
-  const cnt = 280, im = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), lam(0x8a735a), cnt);
-  const d = new THREE.Object3D(), c = new THREE.Color(); let k = 0, tries = 0;
-  while (k < cnt && tries++ < 20000) {
-    const x = (Math.random() * 2 - 1) * PA * 1.05, z = (Math.random() * 2 - 1) * PB * 1.05, h = H(x, z), q = qOf(x, z);
-    if (q > 1.0 || h > YTOP - 1) continue;
-    const gi = Math.round((z - GZ0) / CELL) * GNX + Math.round((x - GX0) / CELL);
-    if (GD[gi] < WR + 6) continue;
-    if (!(slopeAt(x, z) > 0.4 || (h < 0.8 && q < 0.2))) continue;
-    const sc = 0.5 + Math.random() * 2.2;
-    d.position.set(x, h + sc * 0.3, z); d.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3); d.scale.set(sc, sc * 0.75, sc);
-    d.updateMatrix(); im.setMatrixAt(k, d.matrix);
-    c.setHSL(0.07 + Math.random() * 0.03, 0.25, 0.3 + Math.random() * 0.2); im.setColorAt(k, c); k++;
-  }
-  im.count = k; scene.add(im);
-})();
 
 (() => { // dos postes rojos con franja blanca con franjas y base negra, cable en leve catenaria y banderas a cuadros
   const red = lam(0xe0401a), wh = lam(0xf4f4f4), dk = lam(0x1d1f22);
@@ -755,15 +739,6 @@ let radarHead = null;   // cabeza giratoria del radar: se mueve de izquierda a d
   box(valla, 0.08, 0.08, 12, yel, 0, 0.6, 0); box(valla, 0.08, 0.08, 12, yel, 0, 1.0, 0);
   valla.position.set(vx, H(vx, vz), vz); valla.rotation.y = Math.atan2(-vs.rz, vs.rx); scene.add(valla);
   cone(RAD.s + 6, -26); cone(RAD.s - 6, -26.5); cone(RAD.s + 14, -17);
-  const sc = document.createElement('canvas'); sc.width = 256; sc.height = 128; const sx = sc.getContext('2d');
-  sx.fillStyle = '#f7f7f5'; sx.fillRect(0, 0, 256, 128); sx.strokeStyle = '#1b1b18'; sx.lineWidth = 8; sx.strokeRect(4, 4, 248, 120);
-  sx.fillStyle = '#1b1b18'; sx.font = '800 56px Arial, sans-serif'; sx.textAlign = 'center'; sx.textBaseline = 'middle'; sx.fillText('RADAR', 128, 66);
-  const sign = new THREE.Group();
-  const panel = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.6), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc), side: THREE.DoubleSide }));
-  panel.position.set(0, 2.1, 0); sign.add(panel);
-  box(sign, 0.12, 2.1, 0.12, grey, -1.2, 1.05, 0); box(sign, 0.12, 2.1, 0.12, grey, 1.2, 1.05, 0);
-  const ls = frame(RAD.s + 16), lx = ls.x + ls.rx * (-14), lz = ls.z + ls.rz * (-14);
-  sign.position.set(lx, H(lx, lz), lz); sign.rotation.y = Math.atan2(-ls.rz, ls.rx); scene.add(sign);      // la antena mira hacia el otro lado (opuesto al centro del rajo); el barrido la mueve a los lados
 })();
 
 /* ───────────── Vehículos ───────────── */
