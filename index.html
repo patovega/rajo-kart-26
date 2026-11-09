@@ -634,14 +634,17 @@ berm(-12.7); berm(12.7);
     const fl = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.8), flagMat); fl.position.set(-side * 1.2, 9.6, 0.3); g.add(fl);
     g.position.set(x, H(x, z), z); g.rotation.y = Math.atan2(-f.rz, f.rx); scene.add(g);
   }
-  // cables en leve catenaria entre los postes
-  const cg = new THREE.Group();
-  for (const dy of [0, -1.2]) {
-    const pts = [];
-    for (let i = 0; i <= 16; i++) { const t = i / 16; pts.push(new THREE.Vector3(-14 + 28 * t, 12.0 + dy - 0.9 * (1 - Math.pow(2 * t - 1, 2)), 0)); }
-    cg.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.06, 6, false), red));
+  // cable izquierdo: sale del piso y sube hasta la punta del poste; el derecho baja desde la punta hasta el piso del rajo
+  const pt = (u, dd) => { const x = f.x + f.rx * u + f.tx * dd, z = f.z + f.rz * u + f.tz * dd; return { x, y: H(x, z), z }; };
+  const V = (q, dy) => new THREE.Vector3(q.x, q.y + dy, q.z);
+  const tL = pt(-14, 0), tR = pt(14, 0);
+  const topL = V(tL, 12.0), topR = V(tR, 12.0);
+  const gL = pt(-27, -6), gR = pt(27, -6);
+  for (const dy of [0, -1.0]) {
+    const left = [V(gL, 0.3 + dy), V(pt(-21, -4), 4.5 + dy), V(pt(-17, -2), 9 + dy), topL];
+    const right = [topR, V(pt(17, -2), 9 + dy), V(pt(21, -4), 4.5 + dy), V(gR, 0.3 + dy)];
+    for (const pts of [left, right]) scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.06, 6, false), red));
   }
-  cg.position.set(f.x, H(f.x, f.z), f.z); cg.rotation.y = Math.atan2(-f.rz, f.rx); scene.add(cg);
 })();
 
 (() => { // cartel: zona de caída de rocas (antes de la zona, a la izquierda del camino, mirando a quien sube)
