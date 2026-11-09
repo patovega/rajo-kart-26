@@ -143,7 +143,8 @@
       "Leo Rey",
       "Karol Dance",
       "Chupalo",
-      "Gabriel Boric"
+      "Gabriel Boric",
+      "Rene Puente"
     ]
   },
   "localidades": [
@@ -270,13 +271,16 @@
       "grande",
       "pequeño",
       "mijito",
-      "mijita"
+      "mijita",
+      "facil"
     ],
     "exactas": [
       "rica",
       "rico",
       "jak",
-      "kast"
+      "kast",
+      "naya",
+      "tio"
     ]
   },
   "frases_prohibidas": {
