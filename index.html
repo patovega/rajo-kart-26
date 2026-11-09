@@ -1395,7 +1395,7 @@ function tryStart() {      // el nombre es obligatorio para jugar
   const n = cleanName($('pname').value);
   if (!nombreValido(n)) {
     const falta = norm(n).split(/[^a-z0-9ñ]+/).filter(Boolean).length < 2;
-    $('nameErr').textContent = falta ? 'Escribe tu nombre y apellido para poder jugar.' : '🤔 Esto no parece un nombre';
+    $('nameErr').textContent = falta ? 'Escribe tu nombre y apellido para poder jugar.' : '🤔 Esto no parece un nombre. Si es un error, contacta a pato vega.';
     $('nameErr').hidden = false; $('pname').focus(); return;
   }
   $('nameErr').hidden = true; playerName = n; horizontal(); launch();
