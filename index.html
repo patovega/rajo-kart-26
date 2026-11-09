@@ -619,19 +619,20 @@ berm(-12.7); berm(12.7);
   im.count = k; scene.add(im);
 })();
 
-(() => { // portal de superficie
-  const g = new THREE.Group(), f = frame(L);
-  const post = lam(0x2f2c29), c = document.createElement('canvas'); c.width = 512; c.height = 128;
-  const x = c.getContext('2d');
-  x.fillStyle = '#f2a900'; x.fillRect(0, 0, 512, 128);
-  x.fillStyle = '#241a10'; for (let i = -2; i < 14; i++) { x.beginPath(); x.moveTo(i * 44, 0); x.lineTo(i * 44 + 22, 0); x.lineTo(i * 44 + 52, 128); x.lineTo(i * 44 + 30, 128); x.fill(); }
-  x.fillStyle = '#fff'; x.fillRect(48, 28, 416, 72);
-  x.fillStyle = '#c9141c'; x.font = '800 54px Arial Narrow, Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('SUPERFICIE', 256, 66);
-  box(g, 1.2, 11, 1.2, post, -14.2, 5.5, 0); box(g, 1.2, 11, 1.2, post, 14.2, 5.5, 0);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(30.4, 5.4), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), side: THREE.DoubleSide }));
-  sign.position.set(0, 11.5, 0); g.add(sign);
-  const gx = f.x, gz = f.z; g.position.set(gx, H(gx, gz), gz);
-  g.rotation.y = Math.atan2(-f.rz, f.rx); scene.add(g);
+(() => { // dos postes con cable y banderas a cuadros a los lados de la meta: se pasan por debajo
+  const red = lam(0xe0401a), cc = document.createElement('canvas'); cc.width = 64; cc.height = 48; const cx = cc.getContext('2d');
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) { cx.fillStyle = (i + j) % 2 ? '#111' : '#f5f5f5'; cx.fillRect(i * 16, j * 16, 16, 16); }
+  const flagMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cc), side: THREE.DoubleSide });
+  const f = frame(L);
+  for (const side of [-1, 1]) {
+    const u = side * 14, x = f.x + f.rx * u, z = f.z + f.rz * u, g = new THREE.Group();
+    box(g, 0.45, 11, 0.45, red, 0, 5.5, 0);
+    const fl = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.8), flagMat); fl.position.set(-side * 1.2, 8.6, 0.3); g.add(fl);
+    g.position.set(x, H(x, z), z); g.rotation.y = Math.atan2(-f.rz, f.rx); scene.add(g);
+  }
+  const c = new THREE.Group();      // cables entre los postes
+  box(c, 28, 0.12, 0.12, red, 0, 10.4, 0); box(c, 28, 0.12, 0.12, red, 0, 9.2, 0);
+  c.position.set(f.x, H(f.x, f.z), f.z); c.rotation.y = Math.atan2(-f.rz, f.rx); scene.add(c);
 })();
 
 (() => { // cartel: zona de caída de rocas (antes de la zona, a la izquierda del camino, mirando a quien sube)
@@ -1781,7 +1782,7 @@ function step(dt) {
   if (P.u > -2 && !context) { wrongT += dt; if (wrongT > 4) return endGame(false, 'Circulaste por la pista contraria sin motivo.'); }
   else wrongT = Math.max(0, wrongT - dt * 2);
 
-  if (P.s >= L - 2) { arrive = { t: 0 }; setBanner('¡Superficie! Sigue hasta el domo.', 'ok'); bannerT = 5; renderAlerts([]); speak('Llegaste a la superficie'); return; }
+  if (P.s >= L - 2) { arrive = { t: 0 }; cotillon(); setBanner('¡Lo lograste! Sigue hasta el domo.', 'ok'); bannerT = 5; renderAlerts([]); speak('Llegaste a la superficie'); return; }
 }
 
 /* ───────────── Cámara ───────────── */
