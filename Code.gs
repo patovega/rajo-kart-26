@@ -13,7 +13,7 @@
  */
 
 const TOKEN = '';        // Opcional: una clave cualquiera. Si la pones aquí, ponla igual en config.js (token).
-const SHEET_ID = '';     // Opcional: si el script NO está dentro de la hoja, pega aquí el ID de la hoja.
+const SHEET_ID = '1JaTjb190q0b-pPDJ5CCfB_fNfenPjcvDqsTB3EfAclY';     // Opcional: si el script NO está dentro de la hoja, pega aquí el ID de la hoja.
 const HOJA = 'Resultados';
 const COLS = ['id', 'fecha', 'nombre', 'resultado', 'tiempo_s', 'metros', 'motivo', 'dispositivo', 'version'];
 const MOTIVOS = ['roca', 'camote', // 'camote' se mantiene para filas ya guardadas
