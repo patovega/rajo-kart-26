@@ -1306,6 +1306,7 @@ const ANIMALES = ['perro','perra','gato','gata','vaca','toro','cerdo','cerda','c
 const norm = t => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 const nombreValido = n => {
   const t = norm(n), palabras = t.split(/[^a-z0-9ñ]+/).filter(Boolean);
+  if (/\d/.test(n)) return false;                                                        // sin números
   if (palabras.length < 2) return false;                                                   // nombre y apellido
   if (t.replace(/\s/g, '').length < 5) return false;                                       // menos de 5 letras
   if (palabras.some(w => ANIMALES.includes(w))) return false;                              // palabras de animales
@@ -1396,7 +1397,8 @@ function tryStart() {      // el nombre es obligatorio para jugar
   const n = cleanName($('pname').value);
   if (!nombreValido(n)) {
     const falta = norm(n).split(/[^a-z0-9ñ]+/).filter(Boolean).length < 2;
-    $('nameErr').textContent = falta ? 'Escribe tu nombre y apellido para poder jugar.' : '🤔 Esto no parece un nombre. Si es un error, contacta a pato vega.';
+    const numero = /\d/.test(n);
+    $('nameErr').textContent = numero ? '🤔 No hay nombres con números.' : falta ? 'Escribe tu nombre y apellido para poder jugar.' : '🤔 Esto no parece un nombre. Si es un error, contacta a pato vega.';
     $('nameErr').hidden = false; $('pname').focus(); return;
   }
   $('nameErr').hidden = true; playerName = n; horizontal(); launch();

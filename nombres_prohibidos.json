@@ -138,7 +138,11 @@
       "Esteban Quito",
       "Aurora Bonita Barrera",
       "Quintín Cuinta",
-      "Oscar Gado"
+      "Oscar Gado",
+      "Alexitico",
+      "Leo Rey",
+      "Karol Dance",
+      "Chupalo"
     ]
   },
   "localidades": [
@@ -240,6 +244,29 @@
       "cresta",
       "chuchas",
       "chucha de tu madre"
+    ],
+    "adjetivos": [
+      "rico",
+      "pobre",
+      "minero",
+      "cachero",
+      "sensual",
+      "feo",
+      "fea",
+      "tonto",
+      "tonta",
+      "loco",
+      "loca",
+      "malo",
+      "mala",
+      "sucio",
+      "sucia",
+      "lindo",
+      "linda",
+      "bruto",
+      "bruta",
+      "gordito",
+      "gordita"
     ]
   },
   "frases_prohibidas": {
