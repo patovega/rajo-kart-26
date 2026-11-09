@@ -41,7 +41,7 @@ body.tv{font-size:22px} body.tv .name{font-size:30px} body.tv .spd{font-size:44p
     <div class="logo">📡</div>
     <div>
       <h1 id="titulo">En vivo</h1>
-      <div class="sub">Partidas en curso (hasta 4) · se actualiza solo cada 2 s</div>
+      <div class="sub">4 partidas al azar entre las que están en curso · cambia cada 25 s</div>
     </div>
     <div class="sp"></div>
     <span class="live off" id="live">🔴 Conectando…</span>
@@ -57,6 +57,7 @@ body.tv{font-size:22px} body.tv .name{font-size:30px} body.tv .spd{font-size:44p
   const TV = /[?&]tv=1/.test(location.search);
   const RUTA_POR_DEFECTO = 1100;      // metros del recorrido si la partida no lo informa
   const CADA_MS = 2000;
+  const MOSTRAR = 4, ROTA_MS = 25000;      // cuántas partidas se muestran y cada cuánto se hace un sorteo nuevo
   let partidas = [], recibido = 0, error = '', cbN = 0;
   if (TV) document.body.classList.add('tv');
   if (CFG.titulo) document.getElementById('titulo').textContent = 'En vivo · ' + CFG.titulo;
@@ -79,9 +80,22 @@ body.tv{font-size:22px} body.tv .name{font-size:30px} body.tv .spd{font-size:44p
       try { const r = await fetch(CFG.endpoint + (CFG.endpoint.includes('?') ? '&' : '?') + 'action=live&_=' + Date.now(), { cache: 'no-store' }); j = await r.json(); }
       catch (e) { j = await jsonp(); }
       if (!j || !Array.isArray(j.partidas)) throw new Error('respuesta inesperada');
-      partidas = j.partidas.slice(0, 4); recibido = Date.now(); error = '';
+      partidas = j.partidas; recibido = Date.now(); error = '';
+      actualizarMostradas();
     } catch (e) { error = String(e && e.message || e); }
     render();
+  }
+
+  // Sorteo: muestra hasta 4 partidas al azar entre las que están en curso, y cambia el sorteo cada ROTA_MS
+  let mostradas = [], ultimaRotacion = 0;
+  function actualizarMostradas() {
+    const ids = partidas.map(p => p.id);
+    const toca = Date.now() - ultimaRotacion >= ROTA_MS;
+    if (toca) { mostradas = []; ultimaRotacion = Date.now(); }
+    const vivos = mostradas.filter(id => ids.includes(id));
+    const resto = ids.filter(id => !vivos.includes(id));
+    for (let i = resto.length - 1; i > 0; i--) { const k = Math.floor(Math.random() * (i + 1)); [resto[i], resto[k]] = [resto[k], resto[i]]; }
+    mostradas = vivos.concat(resto).slice(0, MOSTRAR);
   }
 
   function render() {
@@ -92,7 +106,7 @@ body.tv{font-size:22px} body.tv .name{font-size:30px} body.tv .spd{font-size:44p
     if (error) app.append(h('div', { class: 'err' }, 'No pude leer las partidas (' + error + '). Reintentando…'));
     if (!partidas.length) { app.append(h('div', { class: 'empty' }, 'No hay partidas en curso. Cuando alguien empiece a jugar, aparece aquí.')); return; }
     const grid = h('div', { class: 'grid' });
-    for (const p of partidas) {
+    for (const p of mostradas.map(id => partidas.find(x => x.id === id)).filter(Boolean)) {
       const ruta = p.r > 0 ? p.r : RUTA_POR_DEFECTO;
       const pct = Math.max(0, Math.min(100, p.d / ruta * 100));
       grid.append(h('article', { class: 'car' },

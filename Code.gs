@@ -80,8 +80,8 @@ function listar_() {
   });
 }
 /* Partidas en vivo: cada partida manda un latido cada ~2,5 s. Se guardan en la caché del script (no en la hoja).
-   Como máximo se muestran 4: las 4 que latieron más recientemente. Una partida sin latidos 15 s se considera terminada. */
-const VIVO_MAX = 4, VIVO_VIGENTE_MS = 15000, VIVO_IDX_MS = 30000;
+   Se guardan hasta 12 partidas activas; la página elige 4 al azar. Una partida sin latidos 15 s se considera terminada. */
+const VIVO_MAX = 12, VIVO_VIGENTE_MS = 15000, VIVO_IDX_MS = 30000;
 function vivo_(d) {
   if (TOKEN && d.token !== TOKEN) return;
   const id = String(d.id || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 20);
