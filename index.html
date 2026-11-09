@@ -1233,7 +1233,8 @@ function buildDozer() {
 }
 function spawnZona() {
   if (zonaDoz) { scene.remove(zonaDoz.mesh); zonaDoz = null; }
-  const s = L - 45, mesh = protoSame.clone(true), b = mesh.getObjectByName('beacon'); b.material = b.material.clone();
+  const s = GAP ? GAP.a : L - 45;      // al inicio de la bahía de la pala 2
+  const mesh = protoSame.clone(true), b = mesh.getObjectByName('beacon'); b.material = b.material.clone();
   const bb = new THREE.Box3().setFromObject(mesh), rojo = bas(0xff2a1f);
   for (const x of [bb.min.x * 0.7, bb.max.x * 0.7]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.12), rojo); l.position.set(x, bb.max.y * 0.45, bb.min.z - 0.05); mesh.add(l); }
   scene.add(mesh); addPlates(mesh, 777, CAEX_PLATE.f, CAEX_PLATE.r);
