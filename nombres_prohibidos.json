@@ -142,7 +142,8 @@
       "Alexitico",
       "Leo Rey",
       "Karol Dance",
-      "Chupalo"
+      "Chupalo",
+      "Gabriel Boric"
     ]
   },
   "localidades": [
@@ -246,7 +247,6 @@
       "chucha de tu madre"
     ],
     "adjetivos": [
-      "rico",
       "pobre",
       "minero",
       "cachero",
@@ -266,7 +266,17 @@
       "bruto",
       "bruta",
       "gordito",
-      "gordita"
+      "gordita",
+      "grande",
+      "pequeño",
+      "mijito",
+      "mijita"
+    ],
+    "exactas": [
+      "rica",
+      "rico",
+      "jak",
+      "kast"
     ]
   },
   "frases_prohibidas": {

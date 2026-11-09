@@ -1317,7 +1317,8 @@ const nombreValido = n => {
   const enLista = (arr) => arr.some(x => t.includes(norm(x)));
   const nombres = Object.values(L.nombres).flat();
   if (enLista(nombres) || enLista(L.localidades)) return false;
-  const pal = [].concat(...Object.values(L.palabras_prohibidas));
+  const pal = [].concat(...Object.entries(L.palabras_prohibidas).filter(([k]) => k !== 'exactas').map(([, v]) => v));
+  if ((L.palabras_prohibidas.exactas || []).some(w => palabras.includes(norm(w)))) return false;      // solo palabra completa
   if (pal.some(p => p.includes(' ') || norm(p).length >= 4 ? t.includes(norm(p)) : palabras.includes(norm(p)))) return false;      // 4 letras o más: dentro del nombre; 3 o menos: palabra completa
   const frases = [].concat(...Object.entries(L.frases_prohibidas).filter(([k]) => k !== 'regex_sugeridas').map(([, v]) => v));
   if (frases.some(f => t.includes(norm(f)))) return false;
