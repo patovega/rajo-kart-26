@@ -61,7 +61,8 @@ footer{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center}
 .lane .nm{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lane .ln{position:relative;height:32px}
 .lane .ln::before{content:'';position:absolute;left:0;right:0;top:50%;height:4px;margin-top:-2px;background:var(--line);border-radius:999px}
-.truck{position:absolute;top:50%;transform:translate(-50%,-50%) scaleX(-1);font-size:24px;line-height:1;transition:left 1.2s linear}
+.truck{position:absolute;top:50%;transform:translate(-50%,-50%);line-height:0;transition:left 1.2s linear}
+.truck svg{display:block}
 .celebra{position:fixed;left:50%;transform:translateX(-50%);background:var(--card);border:2px solid var(--accent);border-radius:999px;padding:8px 18px;font-weight:800;z-index:1000;white-space:nowrap;box-shadow:0 6px 20px rgba(0,0,0,.25)}
 .spin{display:inline-block;animation:spin360 1.2s linear infinite;transform-style:preserve-3d}
 @keyframes spin360{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}
@@ -118,7 +119,9 @@ body.tv .only-pc{display:none}
     for (const r of runs) { if (r.o !== 'P') continue; const pct = Math.max(0, Math.min(100, r.d / 1120 * 100)); perdidas[Math.min(RUTA.length - 1, Math.floor(pct / (100 / RUTA.length)))].push(r.n); }
     const carriles = vivas.map(p => {      // una línea por jugador, con su camioneta según el avance
       const ruta = p.r > 0 ? p.r : 1100, pct = Math.max(0, Math.min(100, p.d / ruta * 100));
-      return h('div', { class: 'lane' }, h('div', { class: 'nm', title: p.n }, p.n), h('div', { class: 'ln' }, h('span', { class: 'truck', title: p.d + ' m', style: 'left:' + pct.toFixed(1) + '%' }, '🛻')));
+      const camion = h('span', { class: 'truck', title: p.d + ' m', style: 'left:' + pct.toFixed(1) + '%' });
+      camion.innerHTML = '<svg viewBox="0 0 48 26" width="38" height="21" aria-hidden="true"><rect x="3" y="9" width="22" height="10" rx="1.5" fill="#c9141c"/><rect x="3" y="7" width="22" height="2" fill="#8b1015"/><path d="M26 9h9l6 6v4H26z" fill="#c9141c"/><path d="M29 11h6l3.5 4H29z" fill="#cfe3ff"/><circle cx="12" cy="20" r="4" fill="#222"/><circle cx="36" cy="20" r="4" fill="#222"/></svg>';
+      return h('div', { class: 'lane' }, h('div', { class: 'nm', title: p.n }, p.n), h('div', { class: 'ln' }, camion));
     });
     return h('section', { class: 'card track', id: 'track' },
       h('h2', null, '🗺️ Siguiendo a 10 jugadores'),
