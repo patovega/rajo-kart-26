@@ -52,6 +52,11 @@ canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block}
 .al.bad .sign{border-color:#fff}
 @media (min-width:640px){ #alerts{left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:center;max-width:calc(100vw - 370px)} #banner{top:calc(58px + env(safe-area-inset-top,0px))} }
 #banner.warn{background:var(--amber);color:#2a1f16} #banner.ok{background:var(--ok)}
+#shotImg{width:100%;border-radius:10px;border:2px solid #222;margin:6px 0}
+#signBox{display:flex;align-items:center;gap:12px;background:#fff7e0;border:2px solid #222;border-radius:12px;padding:10px 12px;margin:8px 0}
+#signBox .fp{font-size:44px;line-height:1}
+#signBox .tri{width:64px;height:56px;background:#f2c200;clip-path:polygon(50% 0,100% 100%,0 100%);display:flex;align-items:flex-end;justify-content:center;font-weight:900;font-size:30px;color:#111;padding-bottom:4px;box-sizing:border-box;flex:none}
+#signBox b{font-size:17px;line-height:1.2}
 #metaMsg{position:fixed;left:50%;transform:translateX(-50%);top:calc(112px + env(safe-area-inset-top,0px));width:min(560px,92vw);background:var(--card);color:var(--fg);border:2px solid var(--ok);border-radius:14px;padding:12px 16px;font-size:15px;line-height:1.45;text-align:center;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.25)}
 
 #radio{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(104px + env(safe-area-inset-bottom,0px));width:min(92vw,470px);
@@ -230,12 +235,14 @@ body.tilt-on #wheel{left:calc(12px + env(safe-area-inset-left,0px));right:auto;b
   <div class="card">
     <h2 id="endTitle">Fin del juego</h2>
     <p id="endMsg"></p>
+    <img id="shotImg" alt="" hidden>
+    <div id="signBox" hidden><div class="fp">🤦</div><div class="tri">!</div><b id="signTxt"></b></div>
     <div class="stats">
       <div><b id="endAlt">0</b>m recorridos</div>
       <div><b id="endOv">0</b>adelantamientos</div>
       <div><b id="endTm">0:00</b>tiempo</div>
     </div>
-    <div id="resBox" hidden>
+    <div id="resBox" hidden style="display:none!important">
       <div class="rt">Tu resultado para el ranking</div>
       <textarea id="resTxt" readonly rows="4"></textarea>
       <button class="btn2" id="resCopy" type="button">📋 Copiar resultado</button>
@@ -244,7 +251,7 @@ body.tilt-on #wheel{left:calc(12px + env(safe-area-inset-left,0px));right:auto;b
       <div class="sub2">Respaldo: si no se registra solo, copia el texto y mándaselo al organizador. <a href="ranking.html" target="_blank" rel="noopener">Ver el ranking</a></div>
     </div>
     <button class="btn" id="retryBtn" type="button">Reintentar (R)</button>
-    <button class="btn2" id="chgName" type="button">Cambiar nombre</button>
+    <button class="btn2" id="chgName" type="button" style="display:none!important">Cambiar nombre</button>
   </div>
 </div>
 
@@ -1403,11 +1410,23 @@ function tryStart() {      // el nombre es obligatorio para jugar
 }
 $('pname').addEventListener('input', () => { if (cleanName($('pname').value).length >= 2) $('nameErr').hidden = true; });
 $('chgName').addEventListener('click', () => { resetGame(); mode = 'menu'; stopEngine(); el.ovEnd.hidden = true; el.ovStart.hidden = false; el.hud.hidden = true; $('pname').focus(); });
+let pendingShot = false;      // se toma la captura del choque en el siguiente cuadro
+function signOf(m) {         // señal de la regla incumplida
+  if (/límite de 60/.test(m)) return 'EXCESO DE VELOCIDAD';
+  if (/pista contraria/.test(m)) return 'SENTIDO CONTRARIO';
+  if (/por la derecha/.test(m)) return 'ADELANTAMIENTO POR LA IZQUIERDA';
+  if (/sin solicitar autorización/.test(m)) return 'ADELANTAMIENTO SIN AUTORIZACIÓN';
+  if (/menos de/.test(m)) return 'DISTANCIA DE SEGURIDAD';
+  if (/pretil|volcaste/.test(m)) return 'SALIRSE DE LA PISTA';
+  return '';      // los choques no llevan señal
+}
 function endGame(win, msg) {
   if (mode !== 'play') return;
   mode = win ? 'win' : 'over'; stopEngine(); renderAlerts([]);
   $('endTitle').textContent = win ? '¡Llegaste a la superficie!' : 'Fin del juego';
   $('endMsg').textContent = msg;
+  const sg = win ? '' : signOf(msg); $('signBox').hidden = !sg; $('signTxt').textContent = sg;
+  $('shotImg').hidden = true; pendingShot = !win && (crashFall || crush || /roca|camión|Choque frontal|aplast/.test(msg));
   $('endAlt').textContent = Math.max(0, Math.min(Math.round(L - START_S), Math.round(P.s - START_S))); $('endOv').textContent = overtakes; $('endTm').textContent = fmt(tGame); showResult(win, msg);
   $('retryBtn').textContent = win ? 'Jugar de nuevo (R)' : 'Reintentar (R)';
   beep(win ? 880 : 140, win ? 0.4 : 0.6, win ? 'sine' : 'sawtooth', 0.08);
@@ -1980,6 +1999,7 @@ function loop(now) {
   updateVisuals(dt); updateHud();
   if (mode === 'play') drawRadar();
   renderer.render(scene, camera);
+  if (pendingShot) { pendingShot = false; const im = $('shotImg'); im.src = renderer.domElement.toDataURL('image/jpeg', 0.85); im.hidden = false; }
 }
 resetGame(); camSnap = true;
 requestAnimationFrame(loop);
