@@ -130,6 +130,11 @@ body.vw-on #vwheel{display:block}
 body.vw-on #wheel{display:none!important}
 @media (pointer:coarse) and (max-height:520px){#vwheel{width:112px;height:112px}}
 #cdNum{font-size:84px;font-weight:800;line-height:1.1}
+/* cuenta 3-2-1-¡YA! estilo bloques de colores, con el fondo transparente para ver el rajo y la pista */
+#cdown.transp{background:transparent}
+#cdown.transp .card{background:transparent;border:0;box-shadow:none}
+#cdown.transp h2,#cdown.transp .sub{text-shadow:0 2px 0 #111,0 0 8px rgba(0,0,0,.6);color:#fff}
+#cdown.transp #cdNum{font-family:"Arial Black",Impact,sans-serif;font-size:min(34vw,240px);font-weight:900;line-height:1;color:var(--c,#f2c200);-webkit-text-stroke:.07em #111;paint-order:stroke fill;text-shadow:0 .06em 0 #111,0 .12em .25em rgba(0,0,0,.4)}
 body.tilt-on #wheel{left:calc(12px + env(safe-area-inset-left,0px));right:auto;bottom:calc(10px + env(safe-area-inset-bottom,0px));width:96px;height:96px}
 #calMsg{font-size:19px;font-weight:700;margin:10px 0}
 #calSteps{font-size:15px;line-height:1.7}
@@ -1572,14 +1577,15 @@ $('wheel').addEventListener('click', () => { if (tilt.on) tiltCalibrar(true); })
 $('tiltCal').addEventListener('click', () => { if (!tiltCalibrar(false)) setCtl('Todavía no llega el sensor de giro. Mueve un poco el celular.'); else setCtl('Calibrado con esta posición.'); });
 function launch() {      // cuenta 3-2-1-¡YA! como en Mario Kart; la camioneta no se mueve hasta el ¡YA!
   if (tilt.on && tilt.ang == null) tiltAviso();
-  const box = $('cdown'), num = $('cdNum'), seq = ['3', '2', '1', '¡YA!'];
+  const box = $('cdown'), num = $('cdNum'), seq = ['3', '2', '1', '¡YA!'], cols = ['#1f9d55', '#2f80ed', '#f2c200', '#c9141c'];
   $('cdMsg').textContent = tilt.on ? 'Sostén el celular como un volante, derecho' : '¡Prepárate!';
   box.querySelector('.sub').hidden = !tilt.on;
-  let i = 0; box.hidden = false; num.textContent = seq[0]; beep(523, 0.15, 'square', 0.06);
+  box.classList.add('transp'); el.ovStart.hidden = true;      // el menú se oculta para ver el rajo y la pista
+  let i = 0; box.hidden = false; num.textContent = seq[0]; num.style.setProperty('--c', cols[0]); beep(523, 0.15, 'square', 0.06);
   const iv = setInterval(() => {
     i++;
-    if (i < seq.length) { num.textContent = seq[i]; beep(i === seq.length - 1 ? 880 : 523, 0.15, 'square', 0.06); return; }
-    clearInterval(iv); box.hidden = true;
+    if (i < seq.length) { num.textContent = seq[i]; num.style.setProperty('--c', cols[i]); beep(i === seq.length - 1 ? 880 : 523, 0.15, 'square', 0.06); return; }
+    clearInterval(iv); box.hidden = true; box.classList.remove('transp');
     if (tilt.on && tilt.ang != null) tiltCalibrar(false);
     startGame();
   }, 1000);
