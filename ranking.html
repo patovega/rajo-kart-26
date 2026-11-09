@@ -113,6 +113,7 @@ body.tv .only-pc{display:none}
 
   // Recorrido en la parte superior: cada punto es una partida en curso, ubicada según su avance
   const RUTA = ['curva 1', 'rampa nor este', 'radar', 'caída de rocas', 'pala 2', 'domo'];
+  const ICONOS = { 'rampa nor este': '📡', 'caída de rocas': '🪨', 'pala 2': '🚜', 'domo': '🏁' };
   let vivas = [];
   function buildTrack() {
     const perdidas = RUTA.map(() => []);      // partidas perdidas en cada tramo, según los metros donde se cayeron
@@ -127,7 +128,7 @@ body.tv .only-pc{display:none}
       h('h2', null, '🗺️ Siguiendo a 10 jugadores'),
       h('p', { class: 'hint' }, 'Cada camioneta es una partida en curso. Se actualiza sola.'),
       carriles.length ? h('div', { class: 'lanes' }, ...carriles) : h('div', { class: 'empty' }, 'Nadie está en la pista ahora.'),
-      h('div', { class: 'foot' }, h('div', null), h('div', { class: 'segs' }, ...RUTA.map((r, i) => h('div', { class: 'seg' }, h('div', { class: 'lbl' }, r), perdidas[i].length ? h('div', { class: 'triste', title: perdidas[i].join(', ') }, '😢 ' + perdidas[i].length) : null)))));
+      h('div', { class: 'foot' }, h('div', null), h('div', { class: 'segs' }, ...RUTA.map((r, i) => h('div', { class: 'seg' }, h('div', { class: 'lbl' }, (ICONOS[r] ? ICONOS[r] + ' ' : '') + r), perdidas[i].length ? h('div', { class: 'triste', title: perdidas[i].join(', ') }, '😢 ' + perdidas[i].length) : null)))));
   }
   function refrescarTrack() { const el = document.getElementById('track'); if (el) el.replaceWith(buildTrack()); }
   async function cargarVivo() {
