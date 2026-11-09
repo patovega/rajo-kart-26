@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>En vivo · Rajo Rojo</title>
+<style>
+:root{color-scheme:light dark;--bg:#f4ede0;--card:#fffaf1;--fg:#2a2118;--muted:#7b6a57;--line:#e2d5bf;--accent:#c9141c;--ok:#1f9d55;--bar:#e3a008}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17120e;--card:#251d16;--fg:#f4ead9;--muted:#b5a690;--line:#3a2e22}}
+:root[data-theme="dark"]{--bg:#17120e;--card:#251d16;--fg:#f4ead9;--muted:#b5a690;--line:#3a2e22}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.wrap{max-width:1100px;margin:0 auto;padding:14px 16px 40px}
+header{display:flex;gap:12px;align-items:center;margin:6px 0 16px;flex-wrap:wrap}
+header .logo{width:46px;height:46px;border-radius:12px;background:var(--accent);display:grid;place-items:center;font-size:24px;box-shadow:0 3px 0 rgba(0,0,0,.25)}
+h1{margin:0;font-size:clamp(22px,5vw,32px);line-height:1.1}
+.sub{color:var(--muted);font-size:14px;margin-top:2px}
+.sp{flex:1}
+.live{font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px;background:var(--card);border:1px solid var(--line);white-space:nowrap}
+.live.on{color:var(--ok)} .live.off{color:var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.car{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.car .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.name{font-weight:800;font-size:20px;overflow-wrap:anywhere}
+.spd{font-weight:800;font-size:28px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.spd small{font-size:14px;color:var(--muted);font-weight:600}
+.bar{background:var(--line);border-radius:999px;height:14px;overflow:hidden;margin:14px 0 8px}
+.bar i{display:block;height:100%;background:var(--bar);border-radius:999px;transition:width .6s ease}
+.row{display:flex;justify-content:space-between;color:var(--muted);font-size:14px;font-variant-numeric:tabular-nums;gap:8px}
+.row b{color:var(--fg)}
+.empty{padding:28px 14px;border:2px dashed var(--line);border-radius:14px;color:var(--muted);text-align:center}
+.err{background:var(--accent);color:#fff;border-radius:12px;padding:12px 14px;margin-bottom:14px}
+footer{color:var(--muted);font-size:12.5px;margin-top:16px;text-align:center}
+body.tv{font-size:22px} body.tv .name{font-size:30px} body.tv .spd{font-size:44px} body.tv .row{font-size:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">📡</div>
+    <div>
+      <h1 id="titulo">En vivo</h1>
+      <div class="sub">Partidas en curso (hasta 4) · se actualiza solo cada 2 s</div>
+    </div>
+    <div class="sp"></div>
+    <span class="live off" id="live">🔴 Conectando…</span>
+  </header>
+  <div id="app"></div>
+  <footer>Los datos vienen del script de Google del organizador. Una partida sin noticias 15 s se considera terminada.</footer>
+</div>
+<script src="config.js"></script>
+<script>
+(function () {
+  'use strict';
+  const CFG = window.RR_CONFIG || {};
+  const TV = /[?&]tv=1/.test(location.search);
+  const RUTA_POR_DEFECTO = 1100;      // metros del recorrido si la partida no lo informa
+  const CADA_MS = 2000;
+  let partidas = [], recibido = 0, error = '', cbN = 0;
+  if (TV) document.body.classList.add('tv');
+  if (CFG.titulo) document.getElementById('titulo').textContent = 'En vivo · ' + CFG.titulo;
+
+  const fmtT = s => { const m = Math.floor(s / 60), r = s - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); };
+  const h = (tag, attrs, ...kids) => { const e = document.createElement(tag); for (const k in attrs || {}) { if (k === 'class') e.className = attrs[k]; else e.setAttribute(k, attrs[k]); } for (const c of kids) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c))); return e; };
+
+  function jsonp() {      // plan B si el navegador no deja leer con fetch (CORS)
+    return new Promise((res, rej) => {
+      const name = 'rrVivo' + (++cbN) + '_' + Date.now(), s = document.createElement('script'), t = setTimeout(() => { cleanup(); rej(new Error('tiempo agotado')); }, 8000);
+      function cleanup() { clearTimeout(t); delete window[name]; s.remove(); }
+      window[name] = j => { cleanup(); res(j); }; s.onerror = () => { cleanup(); rej(new Error('no se pudo cargar')); };
+      s.src = CFG.endpoint + (CFG.endpoint.includes('?') ? '&' : '?') + 'action=live&callback=' + name + '&_=' + Date.now(); document.head.append(s);
+    });
+  }
+  async function cargar() {
+    if (!CFG.endpoint) { error = 'Falta configurar el enlace: pega la URL del script de Google en config.js (campo endpoint).'; render(); return; }
+    try {
+      let j;
+      try { const r = await fetch(CFG.endpoint + (CFG.endpoint.includes('?') ? '&' : '?') + 'action=live&_=' + Date.now(), { cache: 'no-store' }); j = await r.json(); }
+      catch (e) { j = await jsonp(); }
+      if (!j || !Array.isArray(j.partidas)) throw new Error('respuesta inesperada');
+      partidas = j.partidas.slice(0, 4); recibido = Date.now(); error = '';
+    } catch (e) { error = String(e && e.message || e); }
+    render();
+  }
+
+  function render() {
+    const app = document.getElementById('app'); app.textContent = '';
+    const st = document.getElementById('live');
+    st.className = 'live ' + (error ? 'off' : 'on');
+    st.textContent = error ? '🔴 Sin conexión' : '🟢 En vivo';
+    if (error) app.append(h('div', { class: 'err' }, 'No pude leer las partidas (' + error + '). Reintentando…'));
+    if (!partidas.length) { app.append(h('div', { class: 'empty' }, 'No hay partidas en curso. Cuando alguien empiece a jugar, aparece aquí.')); return; }
+    const grid = h('div', { class: 'grid' });
+    for (const p of partidas) {
+      const ruta = p.r > 0 ? p.r : RUTA_POR_DEFECTO;
+      const pct = Math.max(0, Math.min(100, p.d / ruta * 100));
+      grid.append(h('article', { class: 'car' },
+        h('div', { class: 'top' }, h('div', { class: 'name' }, p.n), h('div', { class: 'spd' }, p.v, ' ', h('small', null, 'km/h'))),
+        h('div', { class: 'bar' }, h('i', { style: 'width:' + pct.toFixed(1) + '%' })),
+        h('div', { class: 'row' }, h('span', null, 'Avance ', h('b', null, p.d + ' m'), ' de ' + ruta + ' m'), h('span', null, 'Tiempo ', h('b', null, fmtT(p.t))))));
+    }
+    app.append(grid);
+  }
+
+  render(); cargar();
+  setInterval(cargar, CADA_MS);
+})();
+</script>
+</body>
+</html>

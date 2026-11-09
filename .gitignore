@@ -1,0 +1,47 @@
+# Dependencias (por si se añade Node.js en el futuro)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Credenciales y variables de entorno
+.env
+.env.*
+*.pem
+*.key
+
+# Google Apps Script (clasp): .clasprc.json contiene credenciales de acceso
+.clasprc.json
+
+# Pruebas en Python (carpeta pruebas/)
+__pycache__/
+*.pyc
+.pytest_cache/
+.playwright/
+
+# Capturas de pantalla generadas por las pruebas
+pruebas/**/*.png
+
+# Archivos generados / temporales
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+dist/
+build/
+coverage/
+
+# Configuración local de Claude Code (no se comparte)
+.claude/settings.local.json
+
+# Sistema operativo
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Editores e IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace

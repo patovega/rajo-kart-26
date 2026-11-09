@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ranking Rajo Rojo</title>
+<style>
+:root{color-scheme:light dark;--bg:#f4ede0;--card:#fffaf1;--fg:#2a2118;--muted:#7b6a57;--line:#e2d5bf;--accent:#c9141c;--ok:#1f9d55;--bar:#e3a008}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17120e;--card:#251d16;--fg:#f4ead9;--muted:#b5a690;--line:#3a2e22}}
+:root[data-theme="dark"]{--bg:#17120e;--card:#251d16;--fg:#f4ead9;--muted:#b5a690;--line:#3a2e22}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.wrap{max-width:900px;margin:0 auto;padding:14px 14px 40px}
+header{display:flex;gap:12px;align-items:center;margin:6px 0 14px;flex-wrap:wrap}
+header .logo{width:46px;height:46px;border-radius:12px;background:var(--accent);display:grid;place-items:center;font-size:26px;box-shadow:0 3px 0 rgba(0,0,0,.25)}
+h1{margin:0;font-size:clamp(22px,5vw,32px);line-height:1.1}
+.sub{color:var(--muted);font-size:14px;margin-top:2px}
+.sp{flex:1}
+.live{font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px;background:var(--card);border:1px solid var(--line);white-space:nowrap}
+.live.on{color:var(--ok)} .live.off{color:var(--accent)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.stat b{display:block;font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+h2{margin:0 0 4px;font-size:19px}
+.hint{color:var(--muted);font-size:13.5px;margin:0 0 10px}
+.empty{padding:14px;border:2px dashed var(--line);border-radius:12px;color:var(--muted);text-align:center}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{text-align:left;font-size:12.5px;color:var(--muted);font-weight:600;padding:4px 8px;border-bottom:1px solid var(--line)}
+th.num{text-align:right} th.pos{text-align:center}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.pos{width:44px;font-weight:800;font-size:18px;text-align:center}
+td.num{text-align:right;white-space:nowrap}
+.name{font-weight:700;overflow-wrap:anywhere}
+.big{font-weight:800;font-size:17px}
+.badge{display:inline-block;padding:2px 9px;border-radius:999px;background:var(--accent);color:#fff;font-size:12.5px;font-weight:700;white-space:nowrap}
+.bars{display:grid;gap:8px}
+.bar{display:grid;grid-template-columns:minmax(120px,38%) 1fr 34px;gap:8px;align-items:center;font-size:14px}
+.bar .t{background:var(--line);border-radius:999px;height:14px;overflow:hidden}
+.bar .t i{display:block;height:100%;background:var(--bar);border-radius:999px}
+.bar b{text-align:right}
+.feed{display:grid;gap:6px;font-size:14.5px}
+.feed div{padding:6px 10px;border-radius:10px;background:var(--bg)}
+.feed small{color:var(--muted)}
+button{font:inherit;font-weight:700;border:2px solid var(--line);border-radius:10px;padding:6px 12px;background:transparent;color:var(--fg);cursor:pointer}
+.err{background:var(--accent);color:#fff;border-radius:12px;padding:12px 14px;margin-bottom:14px}
+footer{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center}
+/* modo pantalla grande (proyector): ?tv=1 o el botón */
+body.tv .wrap{max-width:1500px}
+body.tv{font-size:22px} body.tv h1{font-size:48px} body.tv h2{font-size:30px} body.tv .stat b{font-size:46px} body.tv .stat span{font-size:18px}
+body.tv td{padding:12px 10px} body.tv td.pos{font-size:34px;width:72px} body.tv .big{font-size:30px}
+body.tv .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start} body.tv .cols .card{margin:0}
+body.tv .only-pc{display:none}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="config.js"></script>
+<script>
+(function () {
+  'use strict';
+  const CFG = window.RR_CONFIG || {};
+  const REASONS = {
+    roca: ['🚧', 'Chocó con una roca'], camote: ['🚧', 'Chocó con una roca'], caex: ['🚛', 'Se acercó a menos de 20 m de un CAEX'], choqueCaex: ['💥', 'Chocó con un CAEX'],
+    frontal: ['⚠️', 'Choque frontal'], pretil: ['🧱', 'Choque contra el pretil'], rajo: ['⛰️', 'Cayó al rajo'], sinAut: ['📻', 'Adelantó sin autorización'],
+    lado: ['↔️', 'Adelantó por el lado equivocado'], pista: ['🚫', 'Pista contraria sin motivo'], otro: ['❔', 'Otro motivo']
+  };
+  const MEDAL = ['🥇', '🥈', '🥉'];
+  const fmtT = s => { const m = Math.floor(s / 60), r = s - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); };
+  const hace = ms => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? s + ' s' : s < 3600 ? Math.round(s / 60) + ' min' : Math.round(s / 3600) + ' h'; };
+  const h = (tag, attrs, ...kids) => { const e = document.createElement(tag); for (const k in attrs || {}) { if (k === 'class') e.className = attrs[k]; else if (k.startsWith('on')) e.addEventListener(k.slice(2), attrs[k]); else e.setAttribute(k, attrs[k]); } for (const c of kids) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c))); return e; };
+  let runs = [], lastOk = 0, error = '', tv = /[?&]tv=1/.test(location.search);
+  document.body.classList.toggle('tv', tv);
+
+  function aggregate() {
+    const by = new Map();
+    for (const r of runs) {
+      const k = r.n.trim().toLowerCase(); let p = by.get(k);
+      if (!p) { p = { n: r.n, tries: 0, bestT: null, bestD: 0, arrived: false }; by.set(k, p); }
+      p.tries++; p.n = r.n; p.bestD = Math.max(p.bestD, r.d);
+      if (r.o === 'D') { p.arrived = true; if (p.bestT == null || r.t < p.bestT) p.bestT = r.t; }
+    }
+    return [...by.values()];
+  }
+  const liveTxt = () => error ? '🔴 Sin conexión' : '🟢 En vivo' + (lastOk ? ' · actualizado hace ' + hace(Date.now() - lastOk) : '');
+  const table = (head, rows) => h('div', { class: 'tbl' }, h('table', null, h('thead', null, h('tr', null, ...head.map(c => h('th', { class: c[1] || '' }, c[0])))), h('tbody', null, ...rows)));
+
+  function render() {
+    const app = document.getElementById('app'); app.textContent = '';
+    const all = aggregate(), arrived = all.filter(p => p.arrived).sort((a, b) => a.bestT - b.bestT), notYet = all.filter(p => !p.arrived).sort((a, b) => b.bestD - a.bestD);
+    const lost = runs.filter(r => r.o === 'P'), top = tv ? 10 : 50;
+    const wrap = h('div', { class: 'wrap' });
+    wrap.append(h('header', null, h('div', { class: 'logo' }, '🛻'), h('div', null, h('h1', null, CFG.titulo || 'Ranking Rajo Rojo'), h('div', { class: 'sub' }, 'Quién llega al domo, en cuánto tiempo y por qué se pierde')), h('div', { class: 'sp' }),
+      h('span', { class: 'live ' + (error ? 'off' : 'on'), id: 'live' }, liveTxt()),
+      h('button', { class: 'only-pc', onclick: () => { tv = !tv; document.body.classList.toggle('tv', tv); render(); } }, tv ? 'Vista normal' : 'Pantalla grande'),
+      h('button', { class: 'only-pc', onclick: descargar }, 'CSV')));
+    if (!CFG.endpoint) { wrap.append(h('div', { class: 'err' }, 'Falta configurar el ranking: pega la URL del script de Google en config.js (campo endpoint).')); app.append(wrap); return; }
+    if (error && !runs.length) wrap.append(h('div', { class: 'err' }, 'No pude leer los resultados todavía (' + error + '). Reintentando…'));
+    const rate = runs.length ? Math.round(runs.filter(r => r.o === 'D').length / runs.length * 100) : 0;
+    wrap.append(h('div', { class: 'stats' }, h('div', { class: 'stat' }, h('b', null, all.length), h('span', null, 'jugadores')), h('div', { class: 'stat' }, h('b', null, runs.length), h('span', null, 'partidas')),
+      h('div', { class: 'stat' }, h('b', null, arrived.length), h('span', null, 'llegaron al domo')), h('div', { class: 'stat' }, h('b', null, rate + '%'), h('span', null, 'partidas que llegan'))));
+
+    const c1 = h('section', { class: 'card' }, h('h2', null, '🏁 Llegaron al domo'), h('p', { class: 'hint' }, 'Ordenados por el mejor tiempo desde la partida hasta frenar frente al domo.'));
+    if (!arrived.length) c1.append(h('div', { class: 'empty' }, runs.length ? 'Nadie ha llegado al domo todavía. Mira quién llegó más lejos.' : 'Aún no hay resultados.'));
+    else c1.append(table([['#', 'pos'], ['Jugador'], ['Tiempo', 'num'], ['Partidas', 'num']], arrived.slice(0, top).map((p, i) => h('tr', null, h('td', { class: 'pos' }, MEDAL[i] || (i + 1)), h('td', { class: 'name' }, p.n), h('td', { class: 'num big' }, fmtT(p.bestT)), h('td', { class: 'num' }, p.tries)))));
+
+    const c2 = notYet.length ? h('section', { class: 'card' }, h('h2', null, arrived.length ? '📏 Los que aún no llegan: más lejos' : '📏 Nadie llegó: quién llegó más lejos'), h('p', { class: 'hint' }, 'Metros desde la partida hasta donde se perdió, con su mejor intento.'),
+      table([['#', 'pos'], ['Jugador'], ['Metros', 'num'], ['Partidas', 'num']], notYet.slice(0, top).map((p, i) => h('tr', null, h('td', { class: 'pos' }, arrived.length ? i + 1 : (MEDAL[i] || (i + 1))), h('td', { class: 'name' }, p.n), h('td', { class: 'num big' }, p.bestD + ' m'), h('td', { class: 'num' }, p.tries))))) : null;
+
+    const c3 = h('section', { class: 'card' }, h('h2', null, '💥 Por qué se pierde'), h('p', { class: 'hint' }, lost.length + ' partidas perdidas en total.'));
+    if (!lost.length) c3.append(h('div', { class: 'empty' }, 'Sin partidas perdidas registradas.'));
+    else {
+      const cnt = {}; lost.forEach(r => { cnt[r.w || 'otro'] = (cnt[r.w || 'otro'] || 0) + 1; });
+      const ent = Object.entries(cnt).sort((a, b) => b[1] - a[1]), mx = ent[0][1];
+      c3.append(h('div', { class: 'bars' }, ...ent.map(([w, n]) => { const R = REASONS[w] || REASONS.otro; return h('div', { class: 'bar' }, h('span', null, R[0] + ' ' + R[1]), h('div', { class: 't' }, h('i', { style: 'width:' + Math.max(4, n / mx * 100) + '%' })), h('b', null, n)); })));
+    }
+    const feedRows = runs.slice().sort((a, b) => b.ts - a.ts).slice(0, tv ? 6 : 10).map(r => { const R = REASONS[r.w] || REASONS.otro;
+      return h('div', null, r.o === 'D' ? '🏁 ' : '💥 ', h('b', null, r.n), r.o === 'D' ? ' llegó al domo en ' + fmtT(r.t) : ' perdió a los ' + r.d + ' m · ' + R[1], ' ', h('small', null, 'hace ' + hace(Date.now() - r.ts))); });
+    const c4 = h('section', { class: 'card' }, h('h2', null, '🕒 Últimas partidas'), feedRows.length ? h('div', { class: 'feed' }, ...feedRows) : h('div', { class: 'empty' }, 'Sin partidas todavía.'));
+    if (tv) wrap.append(h('div', { class: 'cols' }, c1, c2 || c3), h('div', { class: 'cols', style: 'margin-top:16px' }, c2 ? c3 : c4, c2 ? c4 : h('div')));
+    else { wrap.append(c1); if (c2) wrap.append(c2); wrap.append(c3, c4); }
+    wrap.append(h('footer', null, 'Se actualiza sola cada ' + (CFG.refrescarCadaSeg || 8) + ' s · los datos vienen de la hoja de Google del organizador'));
+    app.append(wrap);
+  }
+
+  function descargar() {
+    const filas = [['fecha', 'nombre', 'resultado', 'tiempo_s', 'metros', 'motivo', 'dispositivo']].concat(runs.map(r => [new Date(r.ts).toISOString(), r.n, r.o === 'D' ? 'LLEGÓ' : 'PERDIÓ', r.t, r.d, r.w, r.dev || '']));
+    const csv = '\ufeff' + filas.map(f => f.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(';')).join('\n');
+    const a = h('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), download: 'rajo-rojo-resultados.csv' }); document.body.append(a); a.click(); a.remove();
+  }
+
+  function aplicar(j) {
+    if (!j || !Array.isArray(j.filas)) throw new Error('respuesta inesperada');
+    runs = j.filas.map(f => ({ id: f.id, n: String(f.n), o: f.r === 'LLEGÓ' ? 'D' : 'P', t: Number(f.t), d: Number(f.d), w: f.w || '', dev: f.dev || '', ts: Date.parse(f.f) || Date.now() }));
+    lastOk = Date.now(); error = '';
+  }
+  let cbN = 0;
+  function jsonp() {      // plan B si el navegador no deja leer con fetch (CORS)
+    return new Promise((res, rej) => {
+      const name = 'rrCb' + (++cbN) + '_' + Date.now(), s = document.createElement('script'), t = setTimeout(() => { cleanup(); rej(new Error('tiempo agotado')); }, 12000);
+      function cleanup() { clearTimeout(t); delete window[name]; s.remove(); }
+      window[name] = j => { cleanup(); res(j); }; s.onerror = () => { cleanup(); rej(new Error('no se pudo cargar')); };
+      s.src = CFG.endpoint + (CFG.endpoint.includes('?') ? '&' : '?') + 'action=list&callback=' + name + '&_=' + Date.now(); document.head.append(s);
+    });
+  }
+  async function cargar() {
+    if (!CFG.endpoint) { render(); return; }
+    try {
+      let j;
+      try { const r = await fetch(CFG.endpoint + (CFG.endpoint.includes('?') ? '&' : '?') + 'action=list&_=' + Date.now(), { cache: 'no-store' }); j = await r.json(); }
+      catch (e) { j = await jsonp(); }
+      aplicar(j);
+    } catch (e) { error = String(e && e.message || e); }
+    render();
+  }
+  render(); cargar();
+  setInterval(cargar, Math.max(3, CFG.refrescarCadaSeg || 8) * 1000);
+  setInterval(() => { const e = document.getElementById('live'); if (e) e.textContent = liveTxt(); }, 1000);      // el «hace X s» corre solo, sin redibujar la página
+})();
+</script>
+</body>
+</html>
