@@ -61,7 +61,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center}
 .lane .nm{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lane .ln{position:relative;height:32px}
 .lane .ln::before{content:'';position:absolute;left:0;right:0;top:50%;height:4px;margin-top:-2px;background:var(--line);border-radius:999px}
-.truck{position:absolute;top:50%;transform:translate(-50%,-50%);font-size:24px;line-height:1;transition:left 1.2s linear}
+.truck{position:absolute;top:50%;transform:translate(-50%,-50%) scaleX(-1);font-size:24px;line-height:1;transition:left 1.2s linear}
 .foot .seg{min-height:0;padding:6px 4px}
 @media (max-width:640px){.lane,.foot{grid-template-columns:100px 1fr}}
 .seg .lbl{font-weight:700;color:var(--muted)}
