@@ -1548,10 +1548,19 @@ function tiltAviso() {      // si el navegador no entrega el sensor, se avisa y 
 function tiltCalibrar(aviso) { if (tilt.ang != null) { tilt.neutral = tilt.ang; tilt.sm = 0; if (aviso) { setBanner('Volante calibrado', 'ok'); bannerT = 2; } return true; } return false; }
 $('wheel').addEventListener('click', () => { if (tilt.on) tiltCalibrar(true); });      // en la partida: tocar el volante de la esquina recalibra
 $('tiltCal').addEventListener('click', () => { if (!tiltCalibrar(false)) setCtl('Todavía no llega el sensor de giro. Mueve un poco el celular.'); else setCtl('Calibrado con esta posición.'); });
-function launch() {      // si el celular es el volante, antes de partir hay una cuenta de 3 segundos para calibrarlo (no hay que buscar ningún botón)
-  if (!tilt.on || tilt.ang == null) { if (tilt.on && tilt.ang == null) tiltAviso(); return startGame(); }
-  const box = $('cdown'); let n = 3; $('cdNum').textContent = n; box.hidden = false;
-  const iv = setInterval(() => { n--; if (n > 0) { $('cdNum').textContent = n; return; } clearInterval(iv); tiltCalibrar(false); box.hidden = true; startGame(); }, 1000);
+function launch() {      // cuenta 3-2-1-¡YA! como en Mario Kart; la camioneta no se mueve hasta el ¡YA!
+  if (tilt.on && tilt.ang == null) tiltAviso();
+  const box = $('cdown'), num = $('cdNum'), seq = ['3', '2', '1', '¡YA!'];
+  $('cdMsg').textContent = tilt.on ? 'Sostén el celular como un volante, derecho' : '¡Prepárate!';
+  box.querySelector('.sub').hidden = !tilt.on;
+  let i = 0; box.hidden = false; num.textContent = seq[0]; beep(523, 0.15, 'square', 0.06);
+  const iv = setInterval(() => {
+    i++;
+    if (i < seq.length) { num.textContent = seq[i]; beep(i === seq.length - 1 ? 880 : 523, 0.15, 'square', 0.06); return; }
+    clearInterval(iv); box.hidden = true;
+    if (tilt.on && tilt.ang != null) tiltCalibrar(false);
+    startGame();
+  }, 1000);
 }
 $('tiltInv').addEventListener('click', () => { tilt.inv = !tilt.inv; saveTilt(); $('tiltInv').textContent = tilt.inv ? 'Giro invertido ✔' : 'Invertir giro'; });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
