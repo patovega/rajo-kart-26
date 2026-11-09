@@ -1,5 +1,5 @@
 /**
- * RAJO ROJO · registro de partidas en una Hoja de Google
+ * RAJO KART 26 · registro de partidas en una Hoja de Google
  *
  * Cómo se usa (resumen; los pasos completos están en LEEME.md):
  *   1. Crea una Hoja de cálculo de Google nueva en tu Drive.
@@ -69,7 +69,7 @@ function doGet(e) {
   const p = (e && e.parameter) || {};
   if (p.action === 'list') return salida_({ ok: true, ahora: new Date().toISOString(), filas: listar_() }, p.callback);
   if (p.action === 'live') return salida_({ ok: true, ahora: Date.now(), partidas: vivas_() }, p.callback);
-  return salida_({ ok: true, mensaje: 'Rajo Rojo: el registro está activo.' }, p.callback);
+  return salida_({ ok: true, mensaje: 'Rajo Kart 26: el registro está activo.' }, p.callback);
 }
 function listar_() {
   const sh = hoja_(), n = sh.getLastRow();
@@ -121,7 +121,7 @@ function salida_(obj, cb) {
 
 /** Menú dentro de la hoja: dejar el ranking en cero antes de un evento (guarda una copia de lo anterior). */
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu('Rajo Rojo')
+  SpreadsheetApp.getUi().createMenu('Rajo Kart 26')
     .addItem('Empezar un evento nuevo (vaciar resultados)', 'nuevoEvento')
     .addToUi();
 }

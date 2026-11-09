@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Rajo Rojo</title>
+<title>Rajo Kart 26</title>
 <style>
 :root{
   --panel:rgba(255,248,236,.92); --panel-fg:#2a1f16; --muted:#6f5f50; --line:rgba(70,45,20,.22);
@@ -171,7 +171,7 @@ body.tilt-on #wheel{left:calc(12px + env(safe-area-inset-left,0px));right:auto;b
 
 <div class="overlay" id="ovStart">
   <div class="card">
-    <h1>Rajo Rojo</h1>
+    <h1>Rajo Kart 26</h1>
     <p class="sub">Sube desde el fondo del rajo, pasa junto a la pala de cables y llega a la superficie. El recorrido dura entre uno y dos minutos.</p>
     <label class="nm" for="pname">Tu nombre (obligatorio)</label>
     <input id="pname" type="text" maxlength="20" autocomplete="off" placeholder="Nombre y apellido">
@@ -214,7 +214,7 @@ body.tilt-on #wheel{left:calc(12px + env(safe-area-inset-left,0px));right:auto;b
 </div>
 
 <div class="overlay" id="rot" hidden>
-  <div class="card" style="text-align:center"><div style="font-size:56px">🔄</div><h2>Gira el celular a horizontal</h2><p class="sub">Rajo Rojo se juega con el celular en horizontal.</p></div>
+  <div class="card" style="text-align:center"><div style="font-size:56px">🔄</div><h2>Gira el celular a horizontal</h2><p class="sub">Rajo Kart 26 se juega con el celular en horizontal.</p></div>
 </div>
 <div class="overlay" id="cdown" hidden>
   <div class="card" style="text-align:center"><h2 id="cdMsg">Sostén el celular como un volante, derecho</h2><div id="cdNum">3</div><p class="sub">Calibrando…</p></div>
@@ -1256,8 +1256,8 @@ function showResult(win, msg) {      // texto + código para el ranking (el rank
   const metros = Math.max(0, Math.round(Math.min(P.s, END_S) - START_S)), t = Math.round(tGame * 10) / 10;
   const id = Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 7);
   const code = 'RR1:' + id + '|' + playerName + '|' + (win ? 'D' : 'P') + '|' + t.toFixed(1) + '|' + metros + '|' + (win ? '-' : reasonCode(msg));
-  const human = win ? '🏁 Rajo Rojo · ' + playerName + ' llegó al domo en ' + fmt(tGame) + ' (' + metros + ' m)'
-    : '💥 Rajo Rojo · ' + playerName + ' perdió a los ' + metros + ' m (' + fmt(tGame) + '): ' + msg.replace(/CAEX-\d+/g, 'un CAEX');
+  const human = win ? '🏁 Rajo Kart 26 · ' + playerName + ' llegó al domo en ' + fmt(tGame) + ' (' + metros + ' m)'
+    : '💥 Rajo Kart 26 · ' + playerName + ' perdió a los ' + metros + ' m (' + fmt(tGame) + '): ' + msg.replace(/CAEX-\d+/g, 'un CAEX');
   $('resTxt').value = human + '\n[' + code + ']'; $('resBox').hidden = false; $('resCopy').textContent = '📋 Copiar resultado';
   $('resShare').hidden = !navigator.share;
   rrSend({ token: RRC.token || '', id, n: playerName, o: win ? 'D' : 'P', t, d: metros, w: win ? '' : reasonCode(msg), dev: coarseMq.matches ? 'celular' : (inp.src === 'pad' ? 'volante-mando' : 'teclado'), v: '1' });

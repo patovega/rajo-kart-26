@@ -7,5 +7,5 @@ window.RR_CONFIG = {
   token: '',
   // Cada cuántos segundos se actualiza la página del ranking.
   refrescarCadaSeg: 8,
-  titulo: 'Ranking Rajo Rojo'
+  titulo: 'Ranking Rajo Kart 26'
 };

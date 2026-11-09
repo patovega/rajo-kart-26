@@ -1,4 +1,4 @@
-# Rajo Rojo en GitHub Pages con registro en tu Drive
+# Rajo Kart 26 en GitHub Pages con registro en tu Drive
 
 Cada partida (ganada o perdida) queda como una fila en una Hoja de Google, y `ranking.html` la muestra en vivo.
 
@@ -12,7 +12,7 @@ Cada partida (ganada o perdida) queda como una fila en una Hoja de Google, y `ra
 | `three.min.js` | Motor 3D (va incluido para no depender de otro sitio) |
 
 ## Paso 1 · La hoja y el script (≈ 5 min)
-1. En tu Drive: **Nuevo > Hojas de cálculo de Google**. Ponle un nombre, por ejemplo «Rajo Rojo resultados».
+1. En tu Drive: **Nuevo > Hojas de cálculo de Google**. Ponle un nombre, por ejemplo «Rajo Kart 26 resultados».
 2. En esa hoja: **Extensiones > Apps Script**.
 3. Borra el código que aparece, pega **todo** el contenido de `Code.gs` y guarda (ícono del disquete).
 4. **Implementar > Nueva implementación > ⚙ > Aplicación web**
@@ -31,10 +31,10 @@ endpoint: 'https://script.google.com/macros/s/XXXXXXXX/exec',
 ```
 
 ## Paso 3 · Subir a GitHub Pages
-1. En github.com: **New repository** (por ejemplo `rajo-rojo`), público.
+1. En github.com: **New repository** (por ejemplo `rajo-kart-26`), público.
 2. **Add file > Upload files**: sube todos los archivos de esta carpeta (incluido `three.min.js`) y confirma (**Commit**).
 3. **Settings > Pages > Build and deployment**: *Deploy from a branch*, rama `main`, carpeta `/ (root)`. Guarda.
-4. En 1 o 2 minutos queda en `https://TU-USUARIO.github.io/rajo-rojo/` (el juego) y `.../ranking.html` (el ranking).
+4. En 1 o 2 minutos queda en `https://TU-USUARIO.github.io/rajo-kart-26/` (el juego) y `.../ranking.html` (el ranking).
 
 ## Paso 4 · Probar ANTES del evento (importante)
 1. Abre el juego **desde un celular conectado a la red de la empresa**, escribe un nombre y pierde a propósito.
@@ -43,7 +43,7 @@ endpoint: 'https://script.google.com/macros/s/XXXXXXXX/exec',
 4. Cuando cambies `config.js` en GitHub, los navegadores pueden guardar la versión anterior unos minutos: recarga con Ctrl+F5.
 
 ## Para el día del evento
-- **Vaciar el ranking antes de empezar:** en la hoja, menú **Rajo Rojo > Empezar un evento nuevo**. Guarda una copia de lo anterior en otra pestaña y deja la lista en cero.
+- **Vaciar el ranking antes de empezar:** en la hoja, menú **Rajo Kart 26 > Empezar un evento nuevo**. Guarda una copia de lo anterior en otra pestaña y deja la lista en cero.
 - **Proyector:** abre `ranking.html?tv=1` a pantalla completa. Se actualiza sola cada pocos segundos.
 - **Reparte** la dirección del juego (o un código QR de ella).
 - Cada fila guarda: fecha y hora, nombre, LLEGÓ/PERDIÓ, tiempo, metros, motivo y dispositivo. El botón **CSV** del ranking baja todo como archivo.

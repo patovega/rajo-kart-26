@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ranking Rajo Rojo</title>
+<title>Ranking Rajo Kart 26</title>
 <style>
 :root{color-scheme:light dark;--bg:#f4ede0;--card:#fffaf1;--fg:#2a2118;--muted:#7b6a57;--line:#e2d5bf;--accent:#c9141c;--ok:#1f9d55;--bar:#e3a008}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17120e;--card:#251d16;--fg:#f4ead9;--muted:#b5a690;--line:#3a2e22}}
@@ -94,7 +94,7 @@ body.tv .only-pc{display:none}
     const all = aggregate(), arrived = all.filter(p => p.arrived).sort((a, b) => a.bestT - b.bestT), notYet = all.filter(p => !p.arrived).sort((a, b) => b.bestD - a.bestD);
     const lost = runs.filter(r => r.o === 'P'), top = tv ? 10 : 50;
     const wrap = h('div', { class: 'wrap' });
-    wrap.append(h('header', null, h('div', { class: 'logo' }, '🛻'), h('div', null, h('h1', null, CFG.titulo || 'Ranking Rajo Rojo'), h('div', { class: 'sub' }, 'Quién llega al domo, en cuánto tiempo y por qué se pierde')), h('div', { class: 'sp' }),
+    wrap.append(h('header', null, h('div', { class: 'logo' }, '🛻'), h('div', null, h('h1', null, CFG.titulo || 'Ranking Rajo Kart 26'), h('div', { class: 'sub' }, 'Quién llega al domo, en cuánto tiempo y por qué se pierde')), h('div', { class: 'sp' }),
       h('span', { class: 'live ' + (error ? 'off' : 'on'), id: 'live' }, liveTxt()),
       h('button', { class: 'only-pc', onclick: () => { tv = !tv; document.body.classList.toggle('tv', tv); render(); } }, tv ? 'Vista normal' : 'Pantalla grande'),
       h('button', { class: 'only-pc', onclick: descargar }, 'CSV')));
@@ -130,7 +130,7 @@ body.tv .only-pc{display:none}
   function descargar() {
     const filas = [['fecha', 'nombre', 'resultado', 'tiempo_s', 'metros', 'motivo', 'dispositivo']].concat(runs.map(r => [new Date(r.ts).toISOString(), r.n, r.o === 'D' ? 'LLEGÓ' : 'PERDIÓ', r.t, r.d, r.w, r.dev || '']));
     const csv = '\ufeff' + filas.map(f => f.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(';')).join('\n');
-    const a = h('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), download: 'rajo-rojo-resultados.csv' }); document.body.append(a); a.click(); a.remove();
+    const a = h('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), download: 'rajo-kart-26-resultados.csv' }); document.body.append(a); a.click(); a.remove();
   }
 
   function aplicar(j) {

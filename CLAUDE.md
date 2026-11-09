@@ -1,4 +1,4 @@
-# Rajo Rojo — contexto del proyecto (para Claude Code)
+# Rajo Kart 26 — contexto del proyecto (para Claude Code)
 
 Juego web de conducción por el rajo de una mina (Sierra Gorda, Chile). Todo el texto va en **español de Chile**. Es para una competencia puntual en la empresa: cada partida, ganada o perdida, se registra y alimenta un ranking en vivo.
 
@@ -6,7 +6,7 @@ Juego web de conducción por el rajo de una mina (Sierra Gorda, Chile). Todo el 
 - `index.html` — el juego completo (un solo archivo, ~125 KB, sin build). Three.js r128 local (`three.min.js`), JS plano en un `<script>` grande.
 - `ranking.html` — ranking en vivo (lee la hoja de Google; `?tv=1` = pantalla grande).
 - `config.js` — `window.RR_CONFIG`: `endpoint` (URL `/exec` del Apps Script), `token`, `refrescarCadaSeg`.
-- `Code.gs` — Google Apps Script: `doPost` guarda una fila por partida (dedup por `id`, valida y sanea el nombre), `doGet?action=list[&callback=]` entrega la lista (JSON o JSONP). Menú «Rajo Rojo > Empezar un evento nuevo».
+- `Code.gs` — Google Apps Script: `doPost` guarda una fila por partida (dedup por `id`, valida y sanea el nombre), `doGet?action=list[&callback=]` entrega la lista (JSON o JSONP). Menú «Rajo Kart 26 > Empezar un evento nuevo».
 - `pruebas/` — pruebas hechas con Playwright (Python) y Node; las rutas son de `/tmp`, hay que ajustarlas.
 - `LEEME.md` — pasos para publicar (hoja + script + GitHub Pages).
 
@@ -22,7 +22,7 @@ Orden aproximado del script: geometría del rajo → terreno (malla de alturas) 
 - Nombre obligatorio al comenzar. Al terminar: código `[RR1:id|nombre|D o P|tiempo|metros|motivo]` (`showResult`), envío con `rrSend/rrFlush` (cola en `localStorage`, reintentos, `fetch` `no-cors` con `text/plain`).
 
 ## Variante en Claude (artefacto)
-Existe `rajo-rojo.html` (mismo juego en un archivo, Three desde cdnjs, ranking como otro artefacto donde el organizador pega los códigos). Esa variante NO puede enviar datos a otros sitios ni usar WebHID dentro del marco de Claude; por eso este paquete es la versión para GitHub Pages. Enlaces vigentes en claude.ai: juego `https://claude.ai/artifact/D4sEVwpmTXgm2UdY5tJdpj`, ranking `https://claude.ai/artifact/7PnVxFTNVYNVySueuGZCmj`.
+Existe `rajo-kart-26.html` (mismo juego en un archivo, Three desde cdnjs, ranking como otro artefacto donde el organizador pega los códigos). Esa variante NO puede enviar datos a otros sitios ni usar WebHID dentro del marco de Claude; por eso este paquete es la versión para GitHub Pages. Enlaces vigentes en claude.ai: juego `https://claude.ai/artifact/D4sEVwpmTXgm2UdY5tJdpj`, ranking `https://claude.ai/artifact/7PnVxFTNVYNVySueuGZCmj`.
 
 ## Pruebas (sin hardware real)
 Playwright headless con `--use-gl=angle --use-angle=swiftshader`. Para probar, copiar `index.html` y sustituir `resetGame(); camSnap = true;` por una línea que exponga `window.__d = {...}` y acelerar el bucle repitiendo `step(dt)`. Con `pruebas/mock_apps_script.py` (imita al script de Google) se probó: envío, reintento sin conexión, no duplicar, ranking en vivo, plan B JSONP, «sin conexión», modo `?tv=1`.
