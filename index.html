@@ -1845,7 +1845,7 @@ function loop(now) {
   pollInput(); if (cal.open) calTick();
   if (mode === 'play' && !rotBlocked) step(dt);      // en vertical (celular) el juego queda en pausa
   if (mode === 'menu') { P.s = START_S; P.u = START_U0; }
-  if (mode === 'play') { liveT -= dt; if (liveT <= 0) { liveT = 2.5; liveSend(); } }      // latido para espectadores
+  if (mode === 'play') { liveT -= dt; if (liveT <= 0) { liveT = 4; liveSend(); } }      // latido para espectadores
   if (radarHead) radarHead.rotation.y = Math.sin(tAnim * 0.9) * 0.75;      // el radar barre de izquierda a derecha
   updateVisuals(dt); updateHud();
   if (mode === 'play') drawRadar();
