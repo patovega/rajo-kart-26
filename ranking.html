@@ -96,6 +96,8 @@ body.tv .only-pc{display:none}
   const hace = ms => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? s + ' s' : s < 3600 ? Math.round(s / 60) + ' min' : Math.round(s / 3600) + ' h'; };
   const h = (tag, attrs, ...kids) => { const e = document.createElement(tag); for (const k in attrs || {}) { if (k === 'class') e.className = attrs[k]; else if (k.startsWith('on')) e.addEventListener(k.slice(2), attrs[k]); else e.setAttribute(k, attrs[k]); } for (const c of kids) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c))); return e; };
   let runs = [], lastOk = 0, error = '', tv = /[?&]tv=1/.test(location.search);
+  let serverOff = 0;      // diferencia entre la hora del servidor y la de este equipo (evita errores por el reloj del PC)
+  const ahoraSrv = () => Date.now() + serverOff;
   document.body.classList.toggle('tv', tv);
 
   function aggregate() {
@@ -108,7 +110,7 @@ body.tv .only-pc{display:none}
     }
     return [...by.values()];
   }
-  const liveTxt = () => error ? '🔴 Sin conexión' : '🟢 En vivo' + (lastOk ? ' · actualizado hace ' + hace(Date.now() - lastOk) : '');
+  const liveTxt = () => error ? '🔴 Sin conexión' : '🟢 En vivo' + (lastOk ? ' · actualizado hace ' + hace(ahoraSrv() - lastOk) : '');
   const table = (head, rows) => h('div', { class: 'tbl' }, h('table', null, h('thead', null, h('tr', null, ...head.map(c => h('th', { class: c[1] || '' }, c[0])))), h('tbody', null, ...rows)));
 
   // Recorrido en la parte superior: cada punto es una partida en curso, ubicada según su avance
@@ -172,7 +174,7 @@ body.tv .only-pc{display:none}
       c3.append(h('div', { class: 'bars' }, ...ent.map(([w, n]) => { const R = REASONS[w] || REASONS.otro; return h('div', { class: 'bar' }, h('span', null, R[0] + ' ' + R[1]), h('div', { class: 't' }, h('i', { style: 'width:' + Math.max(4, n / mx * 100) + '%' })), h('b', null, n)); })));
     }
     const feedRows = runs.slice().sort((a, b) => b.ts - a.ts).slice(0, tv ? 6 : 10).map(r => { const R = REASONS[r.w] || REASONS.otro;
-      return h('div', null, r.o === 'D' ? '🏁 ' : '💥 ', h('b', null, r.n), r.o === 'D' ? ' llegó al domo en ' + fmtT(r.t) : ' perdió a los ' + r.d + ' m · ' + R[1], ' ', h('small', null, 'hace ' + hace(Date.now() - r.ts))); });
+      return h('div', null, r.o === 'D' ? '🏁 ' : '💥 ', h('b', null, r.n), r.o === 'D' ? ' llegó al domo en ' + fmtT(r.t) : ' perdió a los ' + r.d + ' m · ' + R[1], ' ', h('small', null, 'hace ' + hace(ahoraSrv() - r.ts))); });
     const c4 = h('section', { class: 'card' }, h('h2', null, '🕒 Últimas partidas'), feedRows.length ? h('div', { class: 'feed' }, ...feedRows) : h('div', { class: 'empty' }, 'Sin partidas todavía.'));
     if (tv) wrap.append(h('div', { class: 'cols' }, c1, c2 || c3), h('div', { class: 'cols', style: 'margin-top:16px' }, c2 ? c3 : c4, c2 ? c4 : h('div')));
     else { wrap.append(c1); if (c2) wrap.append(c2); wrap.append(c3, c4); }
@@ -203,6 +205,7 @@ body.tv .only-pc{display:none}
     if (!j || !Array.isArray(j.filas)) throw new Error('respuesta inesperada');
     runs = j.filas.map(f => ({ id: f.id, n: String(f.n), o: f.r === 'LLEGÓ' ? 'D' : 'P', t: Number(f.t), d: Number(f.d), w: f.w || '', dev: f.dev || '', ts: Date.parse(f.f) || Date.now() }));
     lastOk = Date.now(); error = '';
+    if (j.ahora) { const t = Date.parse(j.ahora); if (!isNaN(t)) serverOff = t - Date.now(); }
     // cotillón y camioneta girando cuando alguien llega al domo (la primera carga no celebra llegadas viejas)
     const llegadas = runs.filter(r => r.o === 'D');
     if (vistasLlegadas === null) vistasLlegadas = new Set(llegadas.map(r => r.id));
