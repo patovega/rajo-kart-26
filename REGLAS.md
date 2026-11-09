@@ -8,6 +8,8 @@ Juega con el celular **horizontal**. Si lo tienes vertical, el juego se pausa y 
 
 ![Pantalla de inicio en el celular](imagenes/celular_inicio.png)
 
+![Celular en partida: volante, acelerar, frenar, velocidad y botón de autorización](imagenes/celular_partida_botones.png)
+
 Controles en pantalla:
 
 - **Volante** (abajo a la izquierda): gira la camioneta.
