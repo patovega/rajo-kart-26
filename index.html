@@ -645,6 +645,11 @@ berm(-12.7); berm(12.7);
     const right = [topR, V(pt(17, -2), 9 + dy), V(pt(21, -4), 4.5 + dy), V(gR, 0.3 + dy)];
     for (const pts of [left, right]) scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.06, 6, false), red));
   }
+  for (const dy of [0, -1.0]) {      // tramo entre las dos puntas, con leve catenaria como en la foto
+    const span = [];
+    for (let i = 0; i <= 16; i++) { const t = i / 16; const q = topL.clone().lerp(topR, t); q.y += dy - 0.7 * (1 - Math.pow(2 * t - 1, 2)); span.push(q); }
+    scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(span), 48, 0.06, 6, false), red));
+  }
 })();
 
 (() => { // cartel: zona de caída de rocas (antes de la zona, a la izquierda del camino, mirando a quien sube)
