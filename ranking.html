@@ -55,6 +55,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:10px;text-align:center}
 .segs{display:grid;grid-template-columns:repeat(6,1fr);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .seg{padding:8px 6px;border-right:1px solid var(--line);min-height:88px;font-size:13.5px;text-align:center;display:flex;flex-direction:column;gap:5px;align-items:center}
 .seg:last-child{border-right:0}
+.triste{font-size:18px;font-weight:700;line-height:1.1}
 .seg .lbl{font-weight:700;color:var(--muted)}
 .chip{background:var(--bg);border-radius:999px;padding:2px 8px;font-weight:700;font-size:12.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:640px){.segs{grid-template-columns:repeat(3,1fr)} .seg:nth-child(3){border-right:0}}
@@ -103,6 +104,8 @@ body.tv .only-pc{display:none}
   let vivas = [];
   function buildTrack() {
     const seg = RUTA.map(() => []), dots = [];
+    const perdidas = RUTA.map(() => []);      // partidas perdidas en cada tramo, según los metros donde se cayeron
+    for (const r of runs) { if (r.o !== 'P') continue; const pct = Math.max(0, Math.min(100, r.d / 1120 * 100)); perdidas[Math.min(RUTA.length - 1, Math.floor(pct / (100 / RUTA.length)))].push(r.n); }
     for (const p of vivas) {
       const ruta = p.r > 0 ? p.r : 1100, pct = Math.max(0, Math.min(100, p.d / ruta * 100));
       const k = Math.min(RUTA.length - 1, Math.floor(pct / (100 / RUTA.length)));
@@ -113,7 +116,7 @@ body.tv .only-pc{display:none}
       h('h2', null, '🗺️ Dónde van ahora'),
       h('p', { class: 'hint' }, 'Cada punto es una partida en curso. Se actualiza sola.'),
       h('div', { class: 'route' }, h('div', { class: 'line' }), ...dots),
-      h('div', { class: 'segs' }, ...RUTA.map((r, i) => h('div', { class: 'seg' }, h('div', { class: 'lbl' }, r), ...seg[i].map(p => h('span', { class: 'chip' }, p.n))))));
+      h('div', { class: 'segs' }, ...RUTA.map((r, i) => h('div', { class: 'seg' }, h('div', { class: 'lbl' }, r), perdidas[i].length ? h('div', { class: 'triste', title: perdidas[i].join(', ') }, '😢 ' + perdidas[i].length) : null, ...seg[i].map(p => h('span', { class: 'chip' }, p.n))))));
   }
   function refrescarTrack() { const el = document.getElementById('track'); if (el) el.replaceWith(buildTrack()); }
   async function cargarVivo() {
