@@ -3,14 +3,16 @@
 Juego web de conducción por el rajo de una mina (Sierra Gorda, Chile). Todo el texto va en **español de Chile**. Es para una competencia puntual en la empresa: cada partida, ganada o perdida, se registra y alimenta un ranking en vivo.
 
 ## Archivos
-- `index.html` — el juego completo (un solo archivo, ~125 KB, sin build). Three.js r128 local (`three.min.js`), JS plano en un `<script>` grande.
+- `index.html` — HTML + CSS del juego; carga `config.js`, `three.min.js` (r128, local) y el módulo `js/main.js`. Sin build: módulos ES nativos (hay que servirlo por http, no abrir el archivo).
+- `js/main.js` — el juego (≈3.000 líneas, en proceso de repartirse en módulos). `js/config/diseno.js` — constantes de diseño (bancos, calzada, velocidades, cotas). `js/datos/caminos.js` — ROUTE, polígonos del rajo, `SEC`, `SEM6`, `PATIOS` (los escriben las herramientas de `pruebas/terreno`). `js/datos/fase7.js` — `D52` (dibujo de la fase 7). Regla de dependencias: config → datos → main (y a futuro terreno → modelos → operaciones → juego → ui).
+- Los bloques de armado del mundo van envueltos en `paso('nombre', () => {...})`: `PASOS` guarda nombre y tiempo (ms) de cada uno, en orden; es la lista de qué se ejecuta y cuándo (`window.__d.PASOS` en el arnés de pruebas).
 - `ranking.html` — ranking en vivo (lee la hoja de Google; `?tv=1` = pantalla grande).
 - `config.js` — `window.RR_CONFIG`: `endpoint` (URL `/exec` del Apps Script), `token`, `refrescarCadaSeg`.
 - `Code.gs` — Google Apps Script: `doPost` guarda una fila por partida (dedup por `id`, valida y sanea el nombre), `doGet?action=list[&callback=]` entrega la lista (JSON o JSONP). Menú «Rajo Kart 26 > Empezar un evento nuevo».
 - `pruebas/` — pruebas hechas con Playwright (Python) y Node; las rutas son de `/tmp`, hay que ajustarlas.
 - `README.md` — pasos para publicar (hoja + script + GitHub Pages).
 
-## Cómo está armado `index.html`
+## Cómo está armado `js/main.js`
 Orden aproximado del script: geometría del rajo → terreno (malla de alturas) → camino/berma/postes → vehículos (CAEX Komatsu 930E amarillos, aljibe único, camionetas rojas doble cabina) → explanada con pala de cable → cartel y zona de rocas en zigzag → estado del juego → `step(dt)` (reglas) → HUD/avisos → entradas (teclado, táctil, volante/mando, WebHID) → bucle.
 - Rajo: elipse (`PA=340, PB=230`), 3 tramos y 2 curvas en U; el camino sube con pendiente constante (`hr(s)`), cota del borde `YTOP=80`, bancos de `BENCH=10`. `H(x,z)` lee una malla de alturas. `frame(s)` da posición/tangente/derecha; `u>0` = derecha.
 - Pista: carriles en `±LANE (6.5)`, se circula por la **izquierda**, pretiles en `±12.7`, choque en `|u|>CRASH_U (10.9)`. Si el terreno de ese lado cae al rajo → caída y rodado; si no → vuelco de lado.
@@ -25,9 +27,10 @@ Orden aproximado del script: geometría del rajo → terreno (malla de alturas) 
 Existe `rajo-kart-26.html` (mismo juego en un archivo, Three desde cdnjs, ranking como otro artefacto donde el organizador pega los códigos). Esa variante NO puede enviar datos a otros sitios ni usar WebHID dentro del marco de Claude; por eso este paquete es la versión para GitHub Pages. Enlaces vigentes en claude.ai: juego `https://claude.ai/artifact/D4sEVwpmTXgm2UdY5tJdpj`, ranking `https://claude.ai/artifact/7PnVxFTNVYNVySueuGZCmj`.
 
 ## Pruebas (sin hardware real)
-Playwright headless con `--use-gl=angle --use-angle=swiftshader`. Para probar, copiar `index.html` y sustituir `resetGame(); camSnap = true;` por una línea que exponga `window.__d = {...}` y acelerar el bucle repitiendo `step(dt)`. Con `pruebas/mock_apps_script.py` (imita al script de Google) se probó: envío, reintento sin conexión, no duplicar, ranking en vivo, plan B JSONP, «sin conexión», modo `?tv=1`.
+Playwright headless con `--use-gl=angle --use-angle=swiftshader`. Para probar, `mk.py` copia `index.html`, `js/`, `three.min.js` y `config.js` a un sitio aparte y en `js/main.js` sustituye `mkPlatform();` por una línea que exponga `window.__d = {...}`; las pruebas aceleran el bucle repitiendo `step(dt)`. Con `pruebas/mock_apps_script.py` (imita al script de Google) se probó: envío, reintento sin conexión, no duplicar, ranking en vivo, plan B JSONP, «sin conexión», modo `?tv=1`.
 
 ## Cotas de los caminos interiores (`pruebas/terreno/`)
+- Las herramientas leen y escriben `js/datos/caminos.js` (SEC, PATIOS, SEM6, polígonos), `js/config/diseno.js` (FLOOR) y `js/main.js` (F7HN, CELQ); `build59.py`, `empalmes.py`, `patch53/54.py` e `isla.py` son parches históricos que apuntaban al `index.html` monolítico.
 - Las cotas de `SEC`, `FLOOR` (fondo, −240) y `F7HN` (fase 7 norponiente, −46; el piso baja hasta −80 en el portón) se calculan con `lp.py` (programación lineal, scipy): pendiente ≤ 10 % y sin subidas en el sentido de bajada, empalmes a igual cota, pared entre caminos vecinos ≤ 1,6 (≈58°) sin empeorar cruces ya apretados, fondo y fase 7 lo más bajos posible. Uso: `python lp.py 1.6 '{"celeste":0.02,"zigzag":0.008}' write` (pendiente mínima por camino). `redis.py base 0 0` lista los cruces apretados. `empalmes.py` agregó la bajada a la fase 7 por la pared norte, el triángulo rosado–naranjo y los `PATIOS` (planos en los empalmes); `mapa.py` dibuja caminos y cotas sobre `imagenes/rajo_aereo_planta.png` → `imagenes/mapa_caminos.png`.
 - Bancos de 16 m en todo el rajo con berma pareja (`BW`: 8 m, y 6 m bajo rosado/naranjo, entre celeste y fase 7 y en las 3 primeras curvas del zigzag); donde la pared es tendida se inclina más la cara en vez de ensanchar la berma. La traza de caminos viene de la foto satelital (Maps, 1,5×); varios tramos van muy juntos (p. ej. inicio del zigzag contra su tramo de más abajo, 40 m), por eso no se puede bajar más el rajo sin redibujar esos tramos.
 - SEM 6 (`SEM6`, `buildSem6`): subestación con dos contenedores en un patio junto a la tercera curva en U de la azul, entre esa curva y el verde (interrampa); `lp.py` le pone la cota de la curva.

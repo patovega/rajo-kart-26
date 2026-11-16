@@ -1,6 +1,6 @@
 # Rediseño de cotas: fondo más bajo, fase 7 más baja y pareja, celeste con pendiente real; el resto de caminos igual. Revisa pendientes y separación entre caminos.
 import json, math, re, sys
-F = r"c:/Users/Usuario/Documents/juegos/rajo-kart/index.html"; h = open(F, encoding="utf8").read()
+F = r"c:/Users/Usuario/Documents/juegos/rajo-kart/js/datos/caminos.js"; h = open(F, encoding="utf8").read()
 i = h.index("const SEC = ["); j = h.index("];      // caminos interiores", i); S = json.loads(h[i+12:j+1].replace("\n", ""))
 names = h[j:h.index("\n", j)].split(":")[1].strip().split(", ")
 i = h.index("const ROUTE = ["); R = json.loads(h[i+14:h.index(";", i)])

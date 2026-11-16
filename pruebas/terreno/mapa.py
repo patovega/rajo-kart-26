@@ -1,5 +1,5 @@
 import json, cv2, re, math
-h=open(r"c:/Users/Usuario/Documents/juegos/rajo-kart/index.html",encoding="utf8").read()
+h=open(r"c:/Users/Usuario/Documents/juegos/rajo-kart/js/datos/caminos.js",encoding="utf8").read()
 i=h.index("const SEC = ["); j=h.index("];      // caminos interiores",i)
 S=json.loads(h[i+12:j+1].replace("\n","")); names=h[j:h.index("\n",j)].split(":")[1].strip().split(", ")
 i=h.index("const ROUTE = ["); R=json.loads(h[i+14:h.index(";",i)])

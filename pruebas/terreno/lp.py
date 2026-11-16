@@ -5,7 +5,8 @@
 import json, math, re, sys, numpy as np
 from scipy.optimize import linprog
 from scipy import sparse
-F = r"c:/Users/Usuario/Documents/juegos/rajo-kart/index.html"; h = open(F, encoding="utf8").read()
+R_ = r"c:/Users/Usuario/Documents/juegos/rajo-kart/js/"; F = R_ + "datos/caminos.js"; FD = R_ + "config/diseno.js"; FM = R_ + "main.js"      # datos (SEC, PATIOS, SEM6), constantes (FLOOR) y terreno (F7HN, CELQ)
+h = open(F, encoding="utf8").read(); hd = open(FD, encoding="utf8").read(); hm = open(FM, encoding="utf8").read()
 i = h.index("const SEC = ["); j = h.index("];      // caminos interiores", i); S = json.loads(h[i+12:j+1].replace("\n", ""))
 names = h[j:h.index("\n", j)].split(":")[1].strip().split(", ")
 i = h.index("const ROUTE = ["); R = json.loads(h[i+14:h.index(";", i)])
@@ -178,10 +179,10 @@ if WRITE:
     h = re.sub(r"const PATIOS = \[.*?\];", pat, h)
     ms = re.search(r"const SEM6 = \{ x: ([^,]*), z: ([^,]*), h: ", h); sx_, sz_ = float(ms.group(1)), float(ms.group(2)); hs_ = min(zg, key=lambda p: math.hypot(p[0]-sx_, p[1]-sz_))[2]      # la SEM queda a la cota de la curva de la azul que tiene al lado
     h = re.sub(r"(const SEM6 = \{ x: [^,]*, z: [^,]*, h: )[^,]*,", lambda m_: m_.group(1) + "%.1f," % hs_, h)
-    h = re.sub(r"const FLOOR = -?\d+, FRAD = 0;", "const FLOOR = %d, FRAD = 0;" % round(X[iFL]), h)
-    h = re.sub(r"F7HN = -?\d+;", "F7HN = %d;" % round(X[iF7]), h)
-    m = re.search(r"const CELQ = (\[\[.*?\]\]);", h); Q = json.loads(m.group(1)); ce = S[N['celeste']]
+    hd = re.sub(r"const FLOOR = -?\d+, FRAD = 0;", "const FLOOR = %d, FRAD = 0;" % round(X[iFL]), hd)
+    hm = re.sub(r"F7HN = -?\d+;", "F7HN = %d;" % round(X[iF7]), hm)
+    m = re.search(r"const CELQ = (\[\[.*?\]\]);", hm); Q = json.loads(m.group(1)); ce = S[N['celeste']]
     for q in Q:
         p = min(ce, key=lambda p: math.hypot(p[0]-q[0], p[1]-q[1])); q[2] = p[2]
-    h = h[:m.start(1)] + json.dumps(Q).replace(" ", "") + h[m.end(1):]
-    open(F, "w", encoding="utf8", newline="").write(h); print("escrito")
+    hm = hm[:m.start(1)] + json.dumps(Q).replace(" ", "") + hm[m.end(1):]
+    open(F, "w", encoding="utf8", newline="").write(h); open(FD, "w", encoding="utf8", newline="").write(hd); open(FM, "w", encoding="utf8", newline="").write(hm); print("escrito")
