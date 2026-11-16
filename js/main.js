@@ -1,7 +1,13 @@
-// Rajo Kart 26 — módulo principal. Importa la configuración (js/config) y los datos (js/datos); el resto se irá repartiendo en js/terreno, js/modelos, js/operaciones, js/juego y js/ui.
+// Rajo Kart 26 — módulo principal. Importa configuración (js/config), datos (js/datos), utilidades (js/comun) y modelos de equipos (js/modelos); el resto se irá repartiendo en js/terreno, js/operaciones, js/juego y js/ui.
 import { TAU, PA, PB, YTOP, BENCH, WR, BLEND, PRET, LANE, CRASH_U, REQ_RANGE, SPEED_LIMIT, CRUISE, VTOP, FOLLOW_DIST, PCX, PCZ, PR, FLOOR, FRAD } from './config/diseno.js';
 import { ROUTE, F7POLY, RIMPOLY, FPOLY, SEC, SEM6, PATIOS } from './datos/caminos.js';
 import { D52 } from './datos/fase7.js';
+import { hash, sm01 } from './comun/mates.js';
+import { addPlates, bas, blob, box, brakeMat, cyl, lam, rockGeo } from './modelos/materiales.js';
+import { ALJ_PLATE, CAEX_PLATE, buildPickup, protoAlj, protoOnc, protoSame, updateSpray } from './modelos/camiones.js';
+import { buildHydShovel, buildShovel, dumpTune, hydPose, makePile, shovelPose } from './modelos/palas.js';
+import { buildCrawlerDrill, buildDrill, nextDrillNum } from './modelos/perforadoras.js';
+import { buildDozerConRoca, buildTrackDozer, buildWheelDozer } from './modelos/dozers.js';
 const PASOS = [];      // pasos de armado del mundo, en orden y con su tiempo (ms): para saber qué se ejecuta y cuánto cuesta
 function paso(nombre, fn) { const t0 = performance.now(); fn(); PASOS.push([nombre, Math.round(performance.now() - t0)]); }
 
@@ -456,13 +462,7 @@ function resize() {
 }
 window.addEventListener('resize', resize); resize();
 
-const lam = (c, o) => new THREE.MeshLambertMaterial(Object.assign({ color: c }, o || {}));
-const bas = c => new THREE.MeshBasicMaterial({ color: c });
-function box(p, w, h, l, m, x, y, z) { const me = new THREE.Mesh(new THREE.BoxGeometry(w, h, l), m); me.position.set(x, y, z); p.add(me); return me; }
-function cyl(p, rt, rb, h, m, x, y, z, rz) { const me = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 18), m); me.position.set(x, y, z); if (rz) me.rotation.z = rz; p.add(me); return me; }
-function hash(a, b) { const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return x - Math.floor(x); }
 
-const sm01 = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
 const RAMPS = [];
 // Fondo mina: piso plano donde parte la Rampa Oeste; pala 1 cargando en su pila tronada (al lado opuesto del camino) y cancha de perforación
 const PITB = { a0: -70, a1: 30, b0: -72, b1: -39, r1: -29, ra1: 30, h: BENCH };      // banco de perforación del fondo (coordenadas a: hacia la pila, b: costado) y su rampa (entre b1 y r1)
@@ -955,276 +955,9 @@ let radarHead = null;   // cabeza giratoria del radar: se mueve de izquierda a d
   cone(RAD.s + 6, -26); cone(RAD.s - 6, -26.5); cone(RAD.s + 14, -17);
 })();
 
-/* ───────────── Vehículos ───────────── */
-const shadowTex = (() => {
-  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
-  const gr = g.createRadialGradient(32, 32, 4, 32, 32, 32); gr.addColorStop(0, 'rgba(0,0,0,.5)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
-})();
-function blob(p, w, l) {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 }));
-  m.rotation.x = -Math.PI / 2; m.position.y = 0.04; p.add(m);
-}
+/* ───────────── Vehículos: los modelos están en js/modelos (camiones, palas, perforadoras, dozers) ───────────── */
 
-const brakeMat = new THREE.MeshBasicMaterial({ color: 0x5a0d0d });       // luces de freno: apagadas = rojo oscuro
-const brakeGlowMat = (() => {
-  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
-  const gr = g.createRadialGradient(32, 32, 2, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-  return new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), color: 0xff2a1f, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-})();
-function buildPickup(bodyC, other) {
-  const g = new THREE.Group();
-  const red = lam(bodyC || 0xc9141c), dark = lam(0x18191b), glass = lam(0x1b2733), chrome = lam(0xb9bec4), orange = new THREE.MeshBasicMaterial({ color: 0xff6a00, side: THREE.DoubleSide });
-  box(g, 2.0, 0.7, 5.0, red, 0, 0.95, 0);
-  box(g, 1.9, 0.95, 2.7, red, 0, 1.775, 0.1);
-  box(g, 1.94, 0.45, 2.45, glass, 0, 1.85, 0.1); box(g, 1.96, 0.47, 0.12, red, 0, 1.85, 0.1);
-  box(g, 1.9, 0.14, 2.7, red, 0, 2.3, 0.1);
-  box(g, 0.1, 0.5, 1.15, red, 0.95, 1.55, -1.875); box(g, 0.1, 0.5, 1.15, red, -0.95, 1.55, -1.875);
-  box(g, 1.9, 0.5, 0.1, red, 0, 1.55, -2.45);
-  box(g, 1.8, 0.04, 1.15, dark, 0, 1.31, -1.875);
-  box(g, 2.06, 0.3, 0.25, dark, 0, 0.6, 2.55); box(g, 2.06, 0.3, 0.25, dark, 0, 0.6, -2.55);
-  box(g, 1.5, 0.3, 0.05, dark, 0, 1.0, 2.51);
-  for (const x of [-0.7, 0.7]) { box(g, 0.4, 0.2, 0.05, bas(0xfff3c4), x, 1.1, 2.52); box(g, 0.4, 0.2, 0.05, other ? bas(0x7a1010) : brakeMat, x, 1.1, -2.52); if (!other) { const gl = new THREE.Sprite(brakeGlowMat.clone()); gl.scale.set(1.7, 1.7, 1); gl.position.set(x, 1.1, -2.65); gl.name = 'brakeGlow'; g.add(gl); } }
-  for (const x of [-1.0, 1.0]) for (const z of [-1.6, 1.6]) { cyl(g, 0.45, 0.45, 0.32, lam(0x0f0f10), x, 0.45, z, Math.PI / 2); cyl(g, 0.24, 0.24, 0.34, chrome, x, 0.45, z, Math.PI / 2); }
-  cyl(g, 0.27, 0.27, 0.1, dark, 0, 2.42, 0.1);
-  const b = cyl(g, 0.21, 0.21, 0.3, new THREE.MeshBasicMaterial({ color: other ? 0xffb000 : 0x3d8bff }), 0, 2.62, 0.1); b.name = 'beacon';
-  // Pértiga: soporte en la tolva, mástil rayado naranja/blanco, bandera y remate
-  box(g, 0.22, 0.34, 0.22, dark, 0.88, 1.47, -2.3);
-  const pm = [new THREE.MeshBasicMaterial({ color: 0xff6a00 }), new THREE.MeshBasicMaterial({ color: 0xffffff })];
-  for (let i = 0; i < 3; i++) cyl(g, 0.06, 0.06, 1.2, pm[i % 2], 0.88, 2.5 + i * 1.2, -2.3);
-  cyl(g, 0.11, 0.11, 0.1, pm[0], 0.88, 5.55, -2.3);
-  const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.62), orange); flag.position.set(0.88 + 0.5, 5.15, -2.3); g.add(flag);
-  blob(g, 3.0, 6.4);
-  return g;
-}
 
-const rockGeo = new THREE.DodecahedronGeometry(1, 0);
-/* Placas con número (lima, como las de los equipos) */
-const plateCache = new Map();
-function plateMat(num) {
-  let m = plateCache.get(num);
-  if (!m) {
-    const c = document.createElement('canvas'); c.width = 256; c.height = 128; const g = c.getContext('2d');
-    g.fillStyle = '#1b1b18'; g.fillRect(0, 0, 256, 128);
-    g.fillStyle = '#d6f01f'; g.fillRect(8, 8, 240, 112);
-    g.fillStyle = '#111'; g.font = '700 92px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(num), 128, 68);
-    m = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) }); plateCache.set(num, m);
-  }
-  return m;
-}
-const truckPlateCache = new Map();
-function truckPlateMat(num) {      // identificador de los camiones: letra amarilla sobre fondo negro
-  let m = truckPlateCache.get(num);
-  if (!m) {
-    const c = document.createElement('canvas'); c.width = 256; c.height = 128; const g = c.getContext('2d');
-    g.fillStyle = '#d4ef1c'; g.fillRect(0, 0, 256, 128); g.fillStyle = '#0d0d0d'; g.fillRect(9, 9, 238, 110);
-    g.fillStyle = '#d4ef1c'; g.font = '700 96px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(num), 128, 68);
-    m = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) }); truckPlateCache.set(num, m);
-  }
-  return m;
-}
-function addPlates(mesh, num, f, r, s) {       // f / r = [y, z, ancho, alto] de la placa delantera / trasera; s = [y, z, ancho, alto, x] a cada costado (tolva)
-  const a = new THREE.Mesh(new THREE.PlaneGeometry(f[2], f[3]), truckPlateMat(num)); a.position.set(f[4] || 0, f[0], f[1]); mesh.add(a);
-  const b = new THREE.Mesh(new THREE.PlaneGeometry(r[2], r[3]), truckPlateMat(num)); b.position.set(0, r[0], r[1]); b.rotation.y = Math.PI; mesh.add(b);
-  if (s) for (const sx of [1, -1]) { const c = new THREE.Mesh(new THREE.PlaneGeometry(s[2], s[3]), truckPlateMat(num)); c.position.set(sx * s[4], s[0], s[1]); c.rotation.y = sx * Math.PI / 2; mesh.add(c); }
-}
-
-const GRILLE_MAT = (() => {      // malla de la rejilla del radiador (una textura: liviano aunque haya muchos camiones)
-  const c = document.createElement('canvas'); c.width = 256; c.height = 256; const g = c.getContext('2d'); g.fillStyle = '#121314'; g.fillRect(0, 0, 256, 256);
-  g.strokeStyle = '#4a4e52'; g.lineWidth = 2; for (let k = 0; k <= 256; k += 12.8) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k, 256); g.moveTo(0, k); g.lineTo(256, k); g.stroke(); }
-  return new THREE.MeshLambertMaterial({ map: new THREE.CanvasTexture(c) });
-})();
-const TIRE_MATS = (() => {      // neumático: banda de rodado con tacos en diagonal y flanco liso
-  const c = document.createElement('canvas'); c.width = 512; c.height = 64; const g = c.getContext('2d'); g.fillStyle = '#1c1c1b'; g.fillRect(0, 0, 512, 64);
-  g.fillStyle = '#080808'; for (let k = 0; k < 32; k++) { const x = k * 16; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 6, 0); g.lineTo(x + 14, 30); g.lineTo(x + 8, 30); g.fill(); g.beginPath(); g.moveTo(x + 8, 34); g.lineTo(x + 14, 34); g.lineTo(x + 6, 64); g.lineTo(x, 64); g.fill(); }
-  const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; t.repeat.set(2, 1);
-  const wall = new THREE.MeshLambertMaterial({ color: 0x1a1a19 }); return [new THREE.MeshLambertMaterial({ map: t }), wall, wall];
-})();
-const rimMats = (() => {      // llanta amarilla con uso: aro exterior, disco rebajado con anillo de pernos y maza (dibujada en la cara)
-  const cache = new Map();
-  return col => { let m = cache.get(col); if (m) return m;
-    const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'), base = '#' + new THREE.Color(col).getHexString(), dk = '#' + new THREE.Color(col).multiplyScalar(0.62).getHexString(), md = '#' + new THREE.Color(col).multiplyScalar(0.82).getHexString();
-    const disc = (r, s) => { g.fillStyle = s; g.beginPath(); g.arc(128, 128, r, 0, 6.3); g.fill(); };
-    disc(128, base); disc(112, dk); disc(104, md); disc(70, dk); disc(62, base); disc(34, md);
-    g.fillStyle = '#2a2622'; for (let k = 0; k < 16; k++) { const a = k * Math.PI / 8; g.beginPath(); g.arc(128 + Math.cos(a) * 48, 128 + Math.sin(a) * 48, 5, 0, 6.3); g.fill(); }      // pernos
-    for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4 + 0.2; g.beginPath(); g.arc(128 + Math.cos(a) * 86, 128 + Math.sin(a) * 86, 7, 0, 6.3); g.fill(); }
-    g.fillStyle = 'rgba(200,185,160,0.35)'; for (let i = 0; i < 40; i++) { g.beginPath(); g.arc(hash(i, 91) * 256, hash(i, 92) * 256, 6 + hash(i, 93) * 18, 0, 6.3); g.fill(); }      // polvo
-    const face = new THREE.MeshLambertMaterial({ map: new THREE.CanvasTexture(c) }), side = new THREE.MeshLambertMaterial({ color: col });
-    m = [side, face, face]; cache.set(col, m); return m; };
-})();
-const grimeTex = (() => {      // camión con uso: polvo pegado, manchas de barro y chorreos oscuros (se multiplica por el color de la pieza)
-  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 260; i++) { const x = hash(i, 71) * 256, y = hash(i, 72) * 256, r = 4 + hash(i, 73) * 26, t = hash(i, 74);
-    g.fillStyle = t < 0.6 ? 'rgba(225,215,195,0.16)' : t < 0.88 ? 'rgba(170,155,135,0.12)' : 'rgba(110,98,85,0.12)'; g.beginPath(); g.ellipse(x, y, r, r * (0.4 + hash(i, 75) * 0.8), hash(i, 76) * 3, 0, 6.3); g.fill(); }
-  for (let i = 0; i < 70; i++) { const x = hash(i, 81) * 256, y = hash(i, 82) * 120, l = 30 + hash(i, 83) * 110; g.fillStyle = 'rgba(100,90,80,0.10)'; g.fillRect(x, y, 1.5 + hash(i, 84) * 3, l); }      // chorreos
-  const gr = g.createLinearGradient(0, 140, 0, 256); gr.addColorStop(0, 'rgba(210,190,160,0)'); gr.addColorStop(1, 'rgba(215,205,190,0.35)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 256);      // polvo abajo
-  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
-})();
-/* Chasis, ruedas (delanteras simples, traseras duales) y cabina a la izquierda, como en los Komatsu 930E */
-function truckBase(g, bodyC, ws = 1) {      // ws: el camión se escala 1,1 a lo ancho y largo; las ruedas se compensan para quedar redondas (Ø ~4 m)      // camión minero de 300 t: llantas amarillas, cubierta delantera con barandas, cabina a la izquierda, radiador al centro con escalera diagonal, estanque entre ruedas
-  const body = lam(bodyC, { map: grimeTex }), dark = lam(0x222426), steel = lam(0x585c60), tire = lam(0x353330), glass = lam(0x1d2a36), lime = bas(0xc8e61a), rail = lam(0x1a1a1a), cabC = lam(0x2a2c2e);
-  box(g, 2.8, 1.1, 11, body, 0, 3.3, 0);      // bastidor
-  const WY = 1.8 * ws, wheel = (x, z, wd) => { const t = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, wd, 24), TIRE_MATS); t.position.set(x, WY, z); t.rotation.z = Math.PI / 2; t.scale.x = ws; g.add(t);
-    const r = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, wd + 0.06, 24), rimMats(bodyC)); r.position.set(x, WY, z); r.rotation.z = Math.PI / 2; r.scale.x = ws; g.add(r); const hb = cyl(g, 0.2, 0.2, wd + 0.2, body, x, WY, z, Math.PI / 2); hb.scale.x = ws; };      // llanta grande amarilla con dibujo y maza
-  wheel(3.05, 3.6, 1.9); wheel(-3.05, 3.6, 1.9);
-  for (const sx of [1, -1]) { wheel(sx * 1.9, -3.4, 1.45); wheel(sx * 3.5, -3.4, 1.45); }      // duales anchas con espacio entre ellas
-  box(g, 3.4, 1.4, 1.4, body, 0, 1.8, -3.4);                           // puente trasero
-  {      // cadenas expulsoras de piedras: cuelgan de la tolva entre las ruedas duales y botan las rocas que se meten entre los neumáticos
-    const NL = 16, im = new THREE.InstancedMesh(new THREE.TorusGeometry(0.13, 0.04, 5, 10), lam(0x3a3c3f), NL * 2), o = new THREE.Object3D(); let n = 0;
-    for (const sx of [1, -1]) for (let k = 0; k < NL; k++) { o.position.set(sx * 2.7, 4.55 - k * 0.2, -4.9 + k * 0.012); o.rotation.set(0, k % 2 ? Math.PI / 2 : 0, Math.PI / 2); o.updateMatrix(); im.setMatrixAt(n++, o.matrix); }
-    for (const sx of [1, -1]) box(g, 0.3, 0.3, 0.3, dark, sx * 2.7, 4.7, -4.9);      // soporte bajo la tolva
-    g.add(im);
-  }
-  box(g, 1.8, 1.6, 1.2, body, 0, 2.4, -4.3);                            // carcasa del diferencial (se ve por detrás)
-  for (const sx of [1, -1]) { cyl(g, 0.32, 0.32, 2.2, lam(0xb8b8b0), sx * 0.95, 3.6, -4.6); cyl(g, 0.45, 0.45, 0.9, body, sx * 0.95, 2.6, -4.6); }      // cilindros de suspensión hacia la tolva
-  for (const sx of [1, -1]) { const hc = cyl(g, 0.34, 0.34, 2.4, body, sx * 1.85, 3.3, -0.9); hc.rotation.x = -0.25; cyl(g, 0.2, 0.2, 1.2, lam(0xb8b8b0), sx * 1.85, 4.3, -1.15); }      // cilindros de levante de la tolva
-  for (const z of [2.75, 3.15]) cyl(g, 0.18, 0.18, 0.9, lam(0xc0201c), 3.1, 5.5, z);      // extintores en la cubierta
-  // lado derecho del conductor (x < 0): caja entre las ruedas delanteras y traseras, y equipo de aire acondicionado en la cubierta
-  box(g, 1.0, 3.5, 1.5, body, -2.9, 2.35, 0.1); for (const y of [1.2, 3.4]) box(g, 0.05, 0.12, 1.3, dark, -3.42, y, 0.1);      // caja alta entre las ruedas delanteras y traseras
-  box(g, 1.3, 1.5, 1.7, body, -2.55, 5.8, 2.95); box(g, 0.06, 0.9, 1.3, GRILLE_MAT, -3.21, 5.8, 2.95);      // aire acondicionado: gabinete atrás en la cubierta, con rejilla al costado
-  { const fan = cyl(g, 0.42, 0.42, 0.08, lam(0x1b1c1e), -2.55, 6.58, 2.95); for (let k = 0; k < 3; k++) { const bl = box(g, 0.75, 0.03, 0.12, lam(0x55595d), -2.55, 6.63, 2.95); bl.rotation.y = k * 1.05; } }      // ventilador del condensador
-  box(g, 0.06, 1.4, 0.06, rail, 3.45, 6.2, 6.0); box(g, 0.1, 0.8, 0.5, dark, 3.6, 6.6, 6.1);      // espejo
-  for (const sx of [1, -1]) { box(g, 1.0, 1.5, 2.6, body, sx * 2.3, 3.1, 0.2); box(g, 0.5, 2.6, 0.5, body, sx * 1.6, 3.4, 2.3); }      // estanques y columnas de suspensión
-  // cubierta delantera: plataforma ancha sobre las ruedas, con barandas
-  box(g, 6.8, 0.22, 3.6, body, 0, 4.95, 4.3);
-  box(g, 6.8, 0.06, 0.06, rail, 0, 6.05, 6.05); for (let x = -3.3; x <= 3.31; x += 1.1) box(g, 0.06, 1.1, 0.06, rail, x, 5.5, 6.05);
-  for (const sx of [1, -1]) { box(g, 0.06, 0.06, 3.5, rail, sx * 3.35, 6.05, 4.3); for (let z = 2.7; z <= 6.0; z += 1.1) box(g, 0.06, 1.1, 0.06, rail, sx * 3.35, 5.5, z); }
-  box(g, 2.4, 1.95, 2.4, cabC, 1.75, 6.03, 3.5);                          // cabina (lado izquierdo)
-  box(g, 2.1, 1.0, 0.08, glass, 1.75, 6.3, 4.72); box(g, 0.08, 1.0, 1.9, glass, 2.96, 6.3, 3.5); box(g, 0.08, 1.0, 1.9, glass, 0.54, 6.3, 3.5);
-  box(g, 1.6, 1.4, 1.6, body, -1.9, 5.8, 3.4);                          // gabinete de control (derecha)
-  // frente robusto que baja casi al piso: bloque del radiador, parrilla alta, cilindros de suspensión delanteros a los lados y parachoques-plataforma abajo
-  box(g, 4.3, 3.7, 2.0, body, 0, 3.05, 5.0);                            // bloque del frente
-  box(g, 4.1, 3.4, 0.2, GRILLE_MAT, 0, 3.2, 6.05);                     // radiador: rejilla negra grande, del parachoques a la cubierta
-  for (const [x, y] of [[-1.45, 3.0], [-1.15, 3.0], [1.15, 3.0], [1.45, 3.0]]) box(g, 0.22, 0.3, 0.06, bas(0xfff6d8), x, y, 6.22);      // focos chicos en la rejilla
-  for (const sx of [1, -1]) { cyl(g, 0.55, 0.55, 2.4, body, sx * 2.0, 3.6, 4.6); cyl(g, 0.3, 0.3, 1.2, lam(0xb8b8b0), sx * 2.0, 2.0, 4.6);      // cilindros de suspensión delanteros
-    for (const dy of [0, 0.75]) { const c = cyl(g, 0.34, 0.34, 0.25, body, sx * 2.0, 3.5 + dy, 5.25); c.rotation.x = Math.PI / 2; } }
-  box(g, 6.6, 0.45, 1.6, body, 0, 1.25, 6.35);                          // parachoques-plataforma bajo
-  for (const sx of [1, -1]) {      // frente robusto: bloques macizos a cada lado de la rejilla, sobre las ruedas, con las tapas redondas de los cilindros
-    box(g, 1.35, 2.3, 1.0, body, sx * 2.8, 3.8, 5.75); box(g, 0.9, 1.4, 0.8, body, sx * 2.55, 1.9, 5.9);
-    for (const x of [2.45, 3.15]) { const c = cyl(g, 0.33, 0.33, 0.35, body, sx * x, 3.75, 6.35); c.rotation.x = Math.PI / 2; }
-    box(g, 1.3, 0.1, 0.05, lime, sx * 2.8, 3.2, 6.27);      // cinta reflectante
-  }
-  box(g, 6.8, 0.1, 0.05, lime, 0, 4.88, 6.12);      // cinta reflectante en el borde de la cubierta
-  box(g, 6.6, 0.12, 0.12, rail, 0, 1.5, 7.15);
-  for (const sx of [1, -1]) { for (const dz of [-0.25, 0.25]) box(g, 0.06, 1.15, 0.06, rail, sx * 3.42, 1.0, 6.5 + dz); for (const y of [0.65, 0.95, 1.3]) box(g, 0.06, 0.05, 0.5, steel, sx * 3.42, y, 6.5); }      // escalerillas cortas a cada costado de afuera del parachoques
-  for (const x of [3.0, -3.0, 2.0]) { for (const xx of [x - 0.22, x + 0.22]) box(g, 0.07, 1.0, 0.07, rail, xx, 1.98, 7.0); box(g, 0.51, 0.07, 0.07, rail, x, 2.48, 7.0); }      // pasamanos para subirse en el parachoques
-  for (const xx of [-2.95, -2.5]) box(g, 0.08, 4.4, 0.08, rail, xx, 3.7, 6.35);      // escalera vertical por la otra orilla, del parachoques a la cubierta
-  for (let y = 1.75; y <= 4.9; y += 0.32) box(g, 0.45, 0.05, 0.06, rail, -2.725, y, 6.35);
-  {      // escalera diagonal por el frente: sube desde el parachoques (un lado) hasta la cubierta junto a la escalera vertical (otro lado), con peldaños y pasamanos
-    const x0 = 1.4, y0 = 1.55, x1 = -2.0, y1 = 4.95, n = 12, an = Math.atan2(y1 - y0, x1 - x0), L = Math.hypot(x1 - x0, y1 - y0), mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
-    for (let k = 0; k <= n; k++) box(g, 0.34, 0.07, 0.62, steel, x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n, 6.6);
-    for (const dz of [-0.32, 0.32]) { const s = box(g, L + 0.4, 0.22, 0.08, dark, mx, my - 0.1, 6.6 + dz); s.rotation.z = an; const hr = box(g, L + 0.4, 0.07, 0.07, rail, mx, my + 1.0, 6.6 + dz); hr.rotation.z = an;
-      for (const t of [0.05, 0.5, 0.95]) box(g, 0.06, 1.05, 0.06, rail, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t + 0.5, 6.6 + dz); }
-  }
-  for (const x of [-0.9, 0.9]) box(g, 0.3, 0.25, 0.08, bas(0xfff6d8), x, 5.25, 6.1);      // focos junto al número
-  for (const sx of [1, -1]) { box(g, 1.5, 0.5, 0.1, dark, sx * 2.8, 4.55, 6.28); for (const x of [2.45, 3.15]) { const l = cyl(g, 0.27, 0.27, 0.14, bas(0xfff6d8), sx * x, 4.55, 6.36); l.rotation.x = Math.PI / 2; } }      // focos redondos bajo la cubierta
-  for (const [x, y, c] of [[-0.85, 3.05, 0xd01818], [0.85, 3.05, 0xd01818], [-0.55, 3.4, 0xd01818], [0.55, 3.4, 0xd01818], [-0.2, 3.2, 0xfff4dc], [0.2, 3.2, 0xfff4dc], [-0.55, 2.95, 0xff7a10], [0.55, 2.95, 0xff7a10]]) { const l = cyl(g, 0.15, 0.15, 0.08, bas(c), x, y, -5.53); l.rotation.x = Math.PI / 2; }      // luces traseras redondas: freno, retroceso y viraje
-  box(g, 0.35, 0.25, 0.1, dark, 0, 2.95, -5.53);      // caja de conexiones
-  const b = cyl(g, 0.24, 0.24, 0.36, new THREE.MeshBasicMaterial({ color: 0xffb000 }), 1.75, 7.18, 3.4); b.name = 'beacon';
-  return b;
-}
-
-function buildTruck(bodyC, accC, loaded) {
-  const g = new THREE.Group();
-  const body = lam(bodyC, { map: grimeTex }), acc = body, liner = lam(0x4a4036, { map: grimeTex });      // sin bordes negros: todo del color de la tolva, con uso
-  truckBase(g, bodyC, 1.1);
-  // tolva con la cola curva: el piso es plano adelante y se levanta en curva hacia atrás; las paredes siguen esa curva por abajo
-  const yb = z => z > -2.4 ? 4.15 : 4.15 + 1.2 * ((-2.4 - z) / 4.2) ** 2, Z0 = 2.2, Z1 = -6.6, ZS = [];
-  for (let k = 0; k <= 16; k++) ZS.push(Z0 + (Z1 - Z0) * k / 16);
-  // casco de la tolva: sección curva (fondo de canoa, como se ve por detrás), más ancha que las ruedas; se hace menos honda hacia la cola
-  const W = 3.7, TOP = 6.75, dep = z => TOP - yb(z), NP = 18;
-  const cs = (p, w, d) => { const ph = Math.PI * p, s = Math.sin(ph); return [-w * Math.cos(ph), TOP - d * Math.pow(s, 0.6)]; };      // p de 0 a 1 cruza de un lado al otro
-  const shell = (w, dd, m) => {
-    const pos = [], idx = [];
-    ZS.forEach(z => { for (let k = 0; k <= NP; k++) { const [x, y] = cs(k / NP, w, dep(z) - dd); pos.push(x, y, z); } });
-    for (let a = 0; a < ZS.length - 1; a++) for (let k = 0; k < NP; k++) { const i0 = a * (NP + 1) + k, i1 = i0 + NP + 1; idx.push(i0, i1, i0 + 1, i0 + 1, i1, i1 + 1); }
-    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); const uv = []; ZS.forEach((z, a) => { for (let k = 0; k <= NP; k++) uv.push(k / NP * 3, a / (ZS.length - 1) * 2); }); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx); geo.computeVertexNormals();
-    const me = new THREE.Mesh(geo, m); g.add(me); return me;
-  };
-  shell(W, 0, lam(bodyC, { side: THREE.DoubleSide, map: grimeTex }));                 // casco exterior
-  shell(W - 0.3, 0.35, lam(0x5a4c3e, { side: THREE.DoubleSide, map: grimeTex }));     // revestimiento interior
-  const ring = (z, r, m, tl = 0.3) => { const d = dep(z), pts = []; for (let k = 0; k <= 24; k++) { const [x, y] = cs(k / 24, W + 0.05, d + 0.05); pts.push(new THREE.Vector3(x, y, z - (y - (TOP - d)) * tl)); }
-    g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, r, 6, false), m)); };
-  for (const z of [1.2, -0.6, -2.6, -4.6]) ring(z, 0.16, body);         // costillas en arco
-  ring(Z1, 0.24, acc, 0);                                                   // borde de la cola
-  for (const sx of [1, -1]) box(g, 0.5, 0.2, 8.9, acc, sx * (W - 0.15), 6.8, -2.2);      // borde superior
-  for (const sx of [1, -1]) { const v = box(g, 0.3, 0.3, 3.0, body, sx * 0.7, yb(-3.8) - 0.05, -3.8); v.rotation.y = sx * 0.25; }      // refuerzos en V bajo la cola
-  box(g, 2 * W, 2.9, 0.5, body, 0, 5.55, 2.0);
-  box(g, 2 * W - 0.6, 2.5, 0.08, liner, 0, 5.75, 1.7);
-  {      // corona (visera) curva sobre la cabina: arco de lado a lado que cae en los costados, con borde delantero oscuro
-    const R = 8, th = Math.asin(3.9 / R), mk = (r, len, m, z, y) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 24, 1, true, -th, 2 * th), m); c.rotation.x = -Math.PI / 2; c.position.set(0, y - r, z); g.add(c); return c; };
-    const bs = lam(bodyC, { side: THREE.DoubleSide, map: grimeTex });
-    mk(R, 5.6, bs, 4.5, 7.95);      // una sola lámina
-    mk(R + 0.02, 0.3, bs, 7.2, 7.97);      // borde delantero
-    { const s = new THREE.Shape(), r = R; s.moveTo(-3.4, 6.8); for (let k = 0; k <= 16; k++) { const x = -3.4 + 6.8 * k / 16; s.lineTo(x, 7.95 - (r - Math.sqrt(r * r - x * x)) + 0.02); } s.lineTo(3.4, 6.8);
-      const fw = new THREE.Mesh(new THREE.ShapeGeometry(s), bs); fw.position.z = 2.0; g.add(fw); const fl = new THREE.Mesh(new THREE.ShapeGeometry(s), lam(0x25282c, { side: THREE.DoubleSide })); fl.position.z = 1.72; g.add(fl); }      // pared delantera hasta la corona
-  }
-  if (loaded) {   // carga de roca dentro de la tolva
-    const rm = [lam(0x6e5c49), lam(0x8a7660), lam(0x574a3b)];
-    for (let i = 0; i < 36; i++) {
-      const x = (hash(i, 1) - 0.5) * 5.0, z = -2.1 + (hash(i, 2) - 0.5) * 7.2, sc = 0.55 + hash(i, 3) * 0.7;
-      const h = 0.4 + 1.9 * Math.max(0, 1 - (x / 2.9) ** 2) * Math.max(0, 1 - ((z + 2.1) / 3.9) ** 2);
-      const r = new THREE.Mesh(rockGeo, rm[i % 3]); r.scale.set(sc, sc * 0.75, sc);
-      r.position.set(x, Math.max(4.75 + h, TOP - (dep(z) - 0.35) * Math.pow(Math.max(0, 1 - (x / (W - 0.3)) ** 2), 0.3) + 0.4) + sc * 0.3, z); r.rotation.set(hash(i, 4) * 3, hash(i, 5) * 3, hash(i, 6) * 3); g.add(r);
-    }
-  }
-  blob(g, 8.4, 14);
-  g.scale.set(1.1, 1, 1.1);      // medidas reales de un camión de 300 t: ~15 m de largo, ~9 m de ancho, ~7,9 m hasta la corona, neumáticos de ~4 m
-  return g;
-}
-const TRUCK_YEL = 0xdcae45, TRUCK_ACC = 0x2f2c29;
-const protoSame = buildTruck(TRUCK_YEL, TRUCK_ACC, true);    // suben cargados
-const protoOnc = buildTruck(TRUCK_YEL, TRUCK_ACC, false);    // bajan vacíos
-const CAEX_PLATE = { f: [4.4, 6.24, 1.5, 0.75, 0.75], r: [4.15, -5.6, 1.5, 0.75], s: [6.0, -0.25, 1.5, 0.75, 3.8] };      // al frente en la rejilla, atrás bajo la tolva y a cada lado de la tolva
-
-/* Aljibe (único): estanque amarillo desgastado, barra de riego trasera y placa 703 */
-const SPR = { N: 80, sx: new Float32Array(80), vx: new Float32Array(80), vz: new Float32Array(80), ph: new Float32Array(80) };
-for (let i = 0; i < SPR.N; i++) { SPR.sx[i] = (hash(i, 11) - 0.5) * 5.2; SPR.vx[i] = (hash(i, 12) - 0.5) * 3.6; SPR.vz[i] = hash(i, 13) * 2.0; SPR.ph[i] = hash(i, 14); }
-function buildAljibe() {      // aljibe tipo HD785 con estanque de agua (como el 703 de la foto): estanque elíptico ancho y gastado con costillas y franjas de barro, nariz volada sobre la cubierta, pasarela y barandas arriba, escalera de acceso atrás, barra de riego con boquillas y cañones laterales, mástil de luces adelante
-  const g = new THREE.Group();
-  const tank = lam(0xc49d2a, { map: grimeTex }), tankD = lam(0x8f7a2e, { map: grimeTex }), dirt = lam(0x6e6245), dark = lam(0x222426), steel = lam(0x585c60), rail = lam(0x1a1a1a), grate = lam(0x2b2d30), white = lam(0xe8e4d8);
-  truckBase(g, 0xdcb21a);
-  const RX = 2.9, RY = 1.9, CY = 6.7, Z0 = 2.0, Z1 = -6.6, LEN = Z0 - Z1;
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, LEN, 36), tank); body.rotation.x = Math.PI / 2; body.scale.set(RX, 1, RY); body.position.set(0, CY, (Z0 + Z1) / 2); g.add(body);      // cuerpo elíptico (más ancho que alto)
-  const lower = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, LEN - 0.2, 36, 1, true, Math.PI * 0.55, Math.PI * 0.9), tankD); lower.rotation.x = Math.PI / 2; lower.scale.set(RX + 0.02, 1, RY + 0.02); lower.position.set(0, CY, (Z0 + Z1) / 2); g.add(lower);      // mitad baja más sucia
-  for (const [z, sz] of [[Z1, 0.45], [Z0, 0.3]]) { const cap = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 18), tank); cap.scale.set(RX, RY, sz * (z > 0 ? 1 : 1)); cap.position.set(0, CY, z); g.add(cap); }      // tapas abombadas
-  for (const z of [-5.2, -3.4, -1.6, 0.2]) { const rb = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.22, 36), dirt); rb.rotation.x = Math.PI / 2; rb.scale.set(RX + 0.05, 1, RY + 0.05); rb.position.set(0, CY, z); g.add(rb); }      // costillas y franjas de barro
-  for (const sx of [1, -1]) box(g, 0.08, 0.08, LEN, dark, sx * (RX - 0.35), CY + 0.95, (Z0 + Z1) / 2);      // cordones de soldadura superiores
-  box(g, 4.6, 1.1, 2.0, tank, 0, CY + 1.15, Z0 + 0.9); cyl(g, 0.55, 0.55, 4.6, tank, 0, CY + 1.15, Z0 + 1.9, Math.PI / 2); box(g, 4.0, 0.9, 1.0, tankD, 0, CY + 0.35, Z0 + 1.3);      // nariz volada sobre la cubierta, redondeada adelante
-  box(g, 1.3, 0.1, LEN + 2.2, grate, 0, CY + RY + 0.05, (Z0 + Z1) / 2 + 1.1);      // pasarela superior (parrilla)
-  for (const sx of [1, -1]) { box(g, 0.05, 0.05, LEN + 2.4, rail, sx * 0.95, CY + RY + 1.05, (Z0 + Z1) / 2 + 1.1); for (let z = Z1 - 0.1; z <= Z0 + 2.2; z += 1.4) box(g, 0.05, 1.0, 0.05, rail, sx * 0.95, CY + RY + 0.55, z); }      // barandas
-  box(g, 1.95, 0.05, 0.05, rail, 0, CY + RY + 1.05, Z1 - 0.1); box(g, 1.95, 0.05, 0.05, rail, 0, CY + RY + 1.05, Z0 + 2.3);      // cierres de la baranda
-  for (const z of [-4.2, -0.6]) { cyl(g, 0.55, 0.55, 0.3, dark, 0, CY + RY + 0.2, z); cyl(g, 0.12, 0.12, 0.5, steel, 0.5, CY + RY + 0.4, z); }      // escotillas con bisagra
-  { const mon = cyl(g, 0.14, 0.14, 1.0, steel, 0.6, CY + RY + 0.6, Z0 + 1.6); const mb = cyl(g, 0.1, 0.1, 1.2, steel, 0.6, CY + RY + 1.3, Z0 + 2.1); mb.rotation.x = 1.0; cyl(g, 0.25, 0.25, 0.2, dark, 0.6, CY + RY + 0.12, Z0 + 1.6); }      // cañón (monitor) de agua adelante
-  for (let y = CY - RY + 0.3; y < CY + RY; y += 0.45) box(g, 0.6, 0.05, 0.05, steel, -(RX - 0.2), y, Z1 + 0.9); for (const x of [-(RX - 0.5), -(RX + 0.1)]) box(g, 0.05, 2 * RY - 0.2, 0.05, steel, x, CY, Z1 + 0.9);      // escalera de acceso atrás (lado derecho)
-  box(g, 5.6, 0.5, 0.4, dark, 0, 3.6, Z1 - 0.5); for (const sx of [1, -1]) box(g, 0.3, 0.9, 0.3, dark, sx * 2.5, 3.2, Z1 - 0.4);      // parachoques trasero
-  const pipe = cyl(g, 0.14, 0.14, 5.6, steel, 0, 3.6, -6.4, Math.PI / 2);               // barra de riego
-  for (const x of [-2.4, 2.4]) cyl(g, 0.1, 0.1, 1.9, steel, x, 4.5, -6.3);
-  for (let i = -2; i <= 2; i++) box(g, 0.2, 0.25, 0.3, steel, i * 1.1, 3.42, -6.5);
-  for (const sx of [1, -1]) { const c = cyl(g, 0.12, 0.12, 0.9, steel, sx * 2.6, 4.9, -6.5); c.rotation.z = sx * 0.9; c.rotation.x = 0.4; box(g, 0.35, 0.35, 0.35, dark, sx * 2.45, 4.6, -6.3); }      // cañones laterales de riego
-  box(g, 0.1, 0.1, 1.0, steel, 0, 3.2, Z1 + 0.3); for (const sx of [1, -1]) { const hs = cyl(g, 0.07, 0.07, 2.6, dark, sx * 1.6, 4.0, Z1 + 0.2); hs.rotation.z = sx * 0.4; }      // válvula y mangueras
-  { const px = 3.2, pz = 5.6; cyl(g, 0.06, 0.06, 3.0, steel, px, 7.5, pz); for (const y of [7.6, 8.4]) box(g, 0.45, 0.35, 0.3, dark, px, y, pz + 0.2); box(g, 0.1, 0.05, 0.6, steel, px, 9.0, pz); }      // mástil con dos focos y antena (adelante a la izquierda)
-  for (const sx of [1, -1]) box(g, 0.06, 0.06, 1.3, white, sx * 2.9, 5.95, 2.4);      // pasamanos blancos junto al estanque
-  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SPR.N * 3), 3));
-  const dc = document.createElement('canvas'); dc.width = dc.height = 32; const dg = dc.getContext('2d');
-  const gr = dg.createRadialGradient(16, 16, 1, 16, 16, 16); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); dg.fillStyle = gr; dg.fillRect(0, 0, 32, 32);
-  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xd8ecff, size: 0.8, map: new THREE.CanvasTexture(dc), transparent: true, opacity: 0.8, depthWrite: false }));
-  pts.name = 'spray'; pts.frustumCulled = false; g.add(pts);
-  blob(g, 8.4, 14);
-  g.scale.set(0.8, 0.8, 0.8);      // HD785 (clase 100 t): ~12 m de largo y ~5,5 m de ancho, claramente más chico que un CAEX de 300 t (15 × 9 m)
-  return g;
-}
-const protoAlj = buildAljibe();
-const ALJ_PLATE = { f: [5.6, 6.08, 1.3, 0.65], r: [6.7, -7.5, 1.3, 0.65], s: [6.9, -4.3, 1.3, 0.65, 2.93] };      // adelante en el panel de la cubierta, atrás en la tapa del estanque y a cada costado del estanque
-function updateSpray(pts) {
-  const a = pts.geometry.attributes.position.array;
-  for (let i = 0; i < SPR.N; i++) {
-    const age = (tAnim * 1.5 + SPR.ph[i]) % 1;
-    a[i * 3] = SPR.sx[i] + SPR.vx[i] * age; a[i * 3 + 1] = Math.max(0.15, 3.7 + 1.2 * age - 6.5 * age * age); a[i * 3 + 2] = -6.7 - (2.5 + SPR.vz[i]) * age;
-  }
-  pts.geometry.attributes.position.needsUpdate = true;
-}
 
 const _look = new THREE.Vector3();
 function place(mesh, s, u, dir, lat) {
@@ -1297,182 +1030,11 @@ function worldToSU(x, z, sh) {
   for (let s = sh - 25; s <= sh + 40; s += 1) { const f = frame(s), d = (f.x - x) ** 2 + (f.z - z) ** 2; if (d < bd) { bd = d; bs = s; } }
   const f = frame(bs); return { s: bs, u: (x - f.x) * f.rx + (z - f.z) * f.rz };
 }
-const TRK = lam(0x585b5f), TRK2 = lam(0x3d4043);      // orugas gris oscuro (palas, bulldozers y perforadoras); zapatas más oscuras
-function buildShovel(num) {      // pala de cables tipo P&H 4100XPC: orugas, sala de máquinas amarilla con franjas negras, cabina adelante a la izquierda, pórtico, pluma negra con roldana, mango y balde negros
-  const g = new THREE.Group(), yel = lam(0xe8b80c), dk = lam(0x1e1f22), blk = lam(0x2a2b2e), gray = lam(0x585c60), glass = lam(0x22313d), rail = lam(0x111111), red = lam(0xc0281e), ropeY = lam(0xd8b020);
-  // orugas: cadena negra con zapatas, ruedas motrices atrás y adelante
-  for (const sx of [-1, 1]) {
-    const tr = new THREE.Group(); tr.position.set(sx * 5.2, 0, 0); g.add(tr);      // medidas tipo 4100XPC: orugas de ~12,8 m de largo y ~13 m de ancho total
-    box(tr, 2.8, 2.1, 12.4, TRK, 0, 1.15, 0);      // oruga gris oscuro
-    for (const z of [-6.2, 6.2]) { const w = cyl(tr, 1.15, 1.15, 2.8, TRK, 0, 1.15, z); w.rotation.z = Math.PI / 2; }
-    for (let z = -5.8; z <= 5.8; z += 1.0) box(tr, 2.9, 0.18, 0.5, TRK2, 0, 2.25, z);      // zapatas
-    for (let z = -4.5; z <= 4.5; z += 1.5) { const r = cyl(tr, 0.45, 0.45, 2.86, gray, 0, 0.95, z); r.rotation.z = Math.PI / 2; }      // rodillos
-  }
-  box(g, 7.8, 1.6, 8.0, blk, 0, 1.7, 0);      // chasis inferior entre las orugas (por atrás entra el cable)
-  cyl(g, 4.2, 4.4, 0.9, dk, 0, 2.95, 0);       // corona de giro
-  const house = new THREE.Group(); house.position.y = 3.4; g.add(house);
-  // sala de máquinas
-  box(house, 11.0, 1.0, 13.0, dk, 0, 0.5, -1.0);      // sala de ~10,7 m de ancho                 // base negra
-  box(house, 10.6, 5.8, 10.8, yel, 0, 3.9, -2.0);                 // cuerpo amarillo
-  box(house, 10.7, 0.5, 10.9, dk, 0, 2.2, -2.0);                  // franja negra baja
-  box(house, 10.7, 0.4, 10.9, dk, 0, 6.6, -2.0);                  // borde superior negro
-  box(house, 7.0, 1.8, 4.0, yel, -1.4, 7.6, -5.0);              // caseta trasera superior (equipos)
-  box(house, 11.0, 3.2, 2.6, blk, 0, 2.7, -8.6);      // contrapeso (radio de cola ~11 m)                 // contrapeso negro atrás
-  box(house, 2.4, 3.4, 2.4, yel, 4.1, 3.8, 4.3);                // caja de equipos adelante a la derecha
-  // cabina del operador: adelante a la izquierda, elevada, con techo y vidrios
-  box(house, 3.4, 2.8, 3.6, yel, -3.4, 7.8, 2.6);
-  box(house, 3.7, 0.35, 3.9, yel, -3.4, 9.35, 2.7);
-  box(house, 3.0, 1.5, 0.1, glass, -3.4, 8.2, 4.42); box(house, 0.1, 1.5, 2.6, glass, -5.12, 8.2, 2.6);
-  // barandas y escalera
-  for (const z of [-7.0, -4.2, -1.4, 1.4]) for (const sx of [-1, 1]) box(house, 0.08, 1.1, 0.08, rail, sx * 5.4, 7.4, z);
-  for (const sx of [-1, 1]) box(house, 0.08, 0.08, 8.6, rail, sx * 5.4, 7.95, -2.8);
-  for (let k = 0; k < 7; k++) box(house, 1.2, 0.1, 0.4, rail, -5.5, 1.2 + k * 0.9, -5.2 + k * 0.6);
-  // número 3: atrás (contrapeso) y en los dos costados
-  const nc = document.createElement('canvas'); nc.width = 256; nc.height = 256; const nx = nc.getContext('2d');
-  nx.fillStyle = '#111'; nx.font = '900 220px Arial, sans-serif'; nx.textAlign = 'center'; nx.textBaseline = 'middle'; nx.fillText(num || '3', 128, 140);
-  const n3m = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(nc), transparent: true, side: THREE.DoubleSide });
-  const ncw = document.createElement('canvas'); ncw.width = 256; ncw.height = 256; const nw = ncw.getContext('2d');
-  nw.fillStyle = '#f2c20e'; nw.font = '900 220px Arial, sans-serif'; nw.textAlign = 'center'; nw.textBaseline = 'middle'; nw.fillText(num || '3', 128, 140);
-  const back3 = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ncw), transparent: true, side: THREE.DoubleSide }));
-  back3.position.set(0, 2.7, -9.95); back3.rotation.y = Math.PI; house.add(back3);
-  for (const sx of [-1, 1]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 2.8), n3m); m.position.set(sx * 5.36, 4.3, -1.4); m.rotation.y = sx * Math.PI / 2; house.add(m); }
-  // pórtico (A) sobre la sala, con poleas rojas
-  const gtop = { y: 13.2, z: -3.0 };
-  for (const sx of [-1, 1]) {
-    const leg = new THREE.Group(); leg.position.set(sx * 1.6, 6.6, -0.6); house.add(leg);
-    const l1 = box(leg, 0.5, 6.8, 0.5, blk, 0, 3.2, 0); l1.rotation.x = -0.36;
-  }
-  box(house, 3.8, 0.6, 0.8, blk, 0, gtop.y, gtop.z); cyl(house, 0.5, 0.5, 3.2, red, 0, gtop.y + 0.5, gtop.z).rotation.z = Math.PI / 2;
-  // pluma negra con roldana en la punta
-  const boom = new THREE.Group(); boom.position.set(0, 4.2, 4.6); boom.rotation.x = -0.72; house.add(boom);
-  box(boom, 2.6, 1.8, 21, blk, 0, 0, 10.4);      // pluma de ~21 m
-  const sheave = cyl(boom, 1.7, 1.7, 1.0, blk, 0, 0.6, 20.6); sheave.rotation.z = Math.PI / 2;
-  cyl(boom, 0.6, 0.6, 1.1, yel, 0, 0.6, 20.6).rotation.z = Math.PI / 2;
-  const tip = { y: 4.2 + 21 * Math.sin(0.72) + 0.6, z: 4.6 + 21 * Math.cos(0.72) };
-  // cables de suspensión de la pluma (del pórtico a la punta)
-  for (const sx of [-0.5, 0.5]) {
-    const a = new THREE.Vector3(sx, gtop.y + 0.3, gtop.z), b = new THREE.Vector3(sx, tip.y - 0.8, tip.z - 0.6), v = b.clone().sub(a);
-    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1, 6), dk); c.scale.y = v.length(); c.position.copy(a).add(b).multiplyScalar(0.5); c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), v.normalize()); house.add(c);
-  }
-  // mango (negro) y balde (negro, con dientes)
-  const arm = new THREE.Group(); arm.position.set(0, 8.6, 10.0); house.add(arm);
-  box(arm, 2.2, 1.4, 2.4, blk, 0, 0, 0);      // silla del mango sobre la pluma
-  const stick = new THREE.Group(); arm.add(stick); box(stick, 1.4, 1.4, 14.5, blk, 0, 0, 6.2);
-  const bucket = new THREE.Group(); bucket.position.set(0, -0.6, 13.6); bucket.scale.setScalar(1.25); stick.add(bucket);      // balde de ~5,5 m de ancho
-  for (const sx of [-1, 1]) box(bucket, 0.3, 3.4, 3.8, blk, sx * 2.05, -1.3, 0);      // balde abierto: costados, frente y espalda; el piso es la compuerta
-  box(bucket, 4.4, 3.4, 0.3, blk, 0, -1.3, 1.75); box(bucket, 4.4, 3.4, 0.3, blk, 0, -1.3, -1.75);
-  box(bucket, 4.6, 0.5, 0.9, gray, 0, 0.35, 1.6);
-  for (let k = -2; k <= 2; k++) box(bucket, 0.35, 0.35, 0.8, gray, k * 0.95, 0.35, 2.3);      // labio y dientes arriba, en el borde de la boca (la compuerta es el fondo)
-  const door = new THREE.Group(); door.position.set(0, -2.95, -1.75); bucket.add(door);      // compuerta inferior: bisagra atrás, se abre hacia abajo para descargar
-  box(door, 4.1, 0.3, 3.5, blk, 0, 0, 1.75); box(door, 0.5, 0.5, 0.6, gray, 0, -0.2, 3.3);      // con su pestillo
-  const load = new THREE.Group(); load.position.set(0, -1.4, 0); bucket.add(load);      // material dentro del balde (cae al abrir)
-  for (let k = 0; k < 7; k++) { const r = new THREE.Mesh(rockGeo, lam(k % 2 ? 0x6e5c49 : 0x8a7660)); const sc = 0.7 + 0.3 * (k % 3); r.scale.set(sc, sc * 0.7, sc); r.position.set((k % 3 - 1) * 1.2, (k % 2) * 0.5, (Math.floor(k / 3) - 1) * 1.1); load.add(r); }
-  box(bucket, 0.5, 2.2, 0.5, blk, -1.6, 1.0, -0.4); box(bucket, 0.5, 2.2, 0.5, blk, 1.6, 1.0, -0.4); box(bucket, 3.7, 0.4, 0.5, blk, 0, 2.1, -0.4);      // asa
-  const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1, 6), ropeY); house.add(rope);      // cables de levante (se ajustan con la pose)
-  return { g, house, arm, stick, bucket, door, load, rope, tip };
-}
-function dumpTune(sv) {      // para cada lado, el ángulo de descarga que deja el fondo del balde ~1,5 m sobre el borde de la tolva (según la cota del piso donde se cuadra el camión)
-  sv.thD = {};
-  for (const sw of [1, -1]) {
-    let lo = -0.6, hi = 0.6; sv.swing = sw;
-    for (let it = 0; it < 18; it++) { const th = (lo + hi) / 2; sv.thD[sw] = th; shovelPose(sv, 4.0); sv.g.updateMatrixWorld(true); const bp = sv.bucket.getWorldPosition(new THREE.Vector3());
-      const gap = bp.y - 3.75 - (H(bp.x, bp.z) + 6.75); if (gap > 1.5) lo = th; else hi = th; }      // th mayor = balde más abajo
-  }
-}
-function shovelPose(sv, ph) {      // cava en el banco → gira → descarga en el camión → vuelve
-  const S = (sv.swing || 1) * Math.PI / 2, TH_DUMP = sv.thD ? sv.thD[sv.swing || 1] : -0.05;      // cava abajo en el frente, gira 90° al camión de la izquierda o de la derecha, descarga y vuelve
-  let psi = 0, th = 1.15 - 0.35 * Math.min(1, ph / 2.0), ext = 0.2 + 1.0 * Math.min(1, ph / 2.0), tilt = 0;
-  if (ph >= 2.0 && ph < 3.6) { const k = sm01((ph - 2.0) / 1.6); psi = S * k; th = 0.8 - (0.8 - TH_DUMP) * k; ext = 1.2 - 0.7 * k; }
-  else if (ph >= 3.6 && ph < 4.6) { psi = S; th = TH_DUMP; ext = 0.5; tilt = Math.sin(Math.PI * (ph - 3.6)) * 0.9; }
-  else if (ph >= 4.6 && ph < 6.2) { const k = sm01((ph - 4.6) / 1.6); psi = S * (1 - k); th = TH_DUMP + (1.15 - TH_DUMP) * k; ext = 0.5 - 0.3 * k; }
-  else if (ph >= 6.2) { th = 1.15; ext = 0.2; }
-  sv.house.rotation.y = psi; sv.arm.rotation.x = th; sv.stick.position.z = ext; sv.bucket.rotation.x = 0;
-  if (sv.door) {      // descarga: la compuerta de abajo se abre y el material cae; al volver se cierra y el balde se llena en el frente
-    sv.door.rotation.x = 1.25 * Math.min(1, tilt / 0.6);
-    const fall = ph >= 3.6 && ph < 4.6 ? (ph - 3.6) : ph >= 4.6 && ph < 5.0 ? 1 : 0;
-    sv.load.visible = !(ph >= 4.0 && ph < 6.4); sv.load.position.y = -1.4 - 6 * fall * fall;
-  }
-  if (sv.rope) {      // cables de levante (amarillos): de la punta de la pluma al balde
-    const c = Math.cos(th), s = Math.sin(th), bz = 13.6 + ext, by = 0.4, ap = sv.arm.position;
-    const bx = { y: ap.y + by * c - bz * s, z: ap.z + by * s + bz * c }, tp = sv.tip;
-    _rv.set(0, bx.y - tp.y, bx.z - tp.z); const len = _rv.length();
-    sv.rope.position.set(0, (tp.y + bx.y) / 2, (tp.z + bx.z) / 2); sv.rope.scale.set(1, len, 1); sv.rope.quaternion.setFromUnitVectors(_ry, _rv.normalize());
-  }
-}
-const _rv = new THREE.Vector3(), _ry = new THREE.Vector3(0, 1, 0);
-function makePile() {
-  const g = new THREE.Group(); g.position.y = 4.75;
-  const rm = [lam(0x6e5c49), lam(0x8a7660), lam(0x574a3b)];
-  for (let i = 0; i < 36; i++) {
-    const x = (hash(i, 1) - 0.5) * 5.0, z = -2.1 + (hash(i, 2) - 0.5) * 7.2, sc = 0.55 + hash(i, 3) * 0.7;
-    const h = 0.4 + 1.9 * Math.max(0, 1 - (x / 2.9) ** 2) * Math.max(0, 1 - ((z + 2.1) / 3.9) ** 2);
-    const r = new THREE.Mesh(rockGeo, rm[i % 3]); r.scale.set(sc, sc * 0.75, sc);
-    r.position.set(x, h + sc * 0.3, z); r.rotation.set(hash(i, 4) * 3, hash(i, 5) * 3, hash(i, 6) * 3); g.add(r);
-  }
-  return g;
-}
 function mkLoaderTruck(al, spot) {
   const mesh = protoOnc.clone(true), b = mesh.getObjectByName('beacon'); b.material = b.material.clone();
   const pile = makePile(); pile.scale.y = 0.05; mesh.add(pile);
   const num = nextCaexId(); addPlates(mesh, num, CAEX_PLATE.f, CAEX_PLATE.r, CAEX_PLATE.s); scene.add(mesh);
   return { mesh, pile, beacon: b, al, la: ARR_LA, spot, num, state: 'arrive', fill: 0, wait: 0 };
-}
-/* Perforadoras de tronadura en la explanada (3 equipos; la del medio es de pre corte, más pequeña) y sus pozos */
-function buildDrill(pre, num) {      // perforadora de pozos de orugas (estilo MD6380): chasis largo y bajo, cabina adelante con focos, torre reticulada alta justo detrás de la cabina con sus gatos de levante, compresor y sala de motor atrás, barandas y escalera diagonal al costado
-  const s = pre ? 0.72 : 1, mh = pre ? 16 : 25, g = new THREE.Group(), yel = lam(0xe3ab1a), dk = lam(0x1f2023), blk = lam(0x2b2c2f), gray = lam(0x6f7377), cabC = lam(0x24302b), glass = lam(0x3a5260), rail = lam(0x161616), lite = bas(0xfff6d8);
-  const B = (w, h, l, m, x, y, z) => box(g, w * s, h * s, l * s, m, x * s, y * s, z * s);
-  for (const sx of [-1, 1]) {      // orugas largas en gris claro
-    B(1.2, 1.4, 11.5, TRK, sx * 2.5, 0.7, -0.6);
-    for (const z of [-6.2, 5.0]) { const w = cyl(g, 0.7 * s, 0.7 * s, 1.22 * s, TRK, sx * 2.5 * s, 0.7 * s, z * s); w.rotation.z = Math.PI / 2; }
-    for (let z = -6; z <= 4.8; z += 0.75) B(1.26, 0.1, 0.36, TRK2, sx * 2.5, 1.42, z);
-    for (let z = -4.5; z <= 3.5; z += 2) { const r = cyl(g, 0.3 * s, 0.3 * s, 1.26 * s, gray, sx * 2.5 * s, 0.45 * s, z * s); r.rotation.z = Math.PI / 2; }
-  }
-  B(3.4, 0.9, 10.5, blk, 0, 1.75, -0.6);                 // bastidor
-  B(5.8, 0.4, 15.6, yel, 0, 2.4, -0.4);                  // cubierta larga
-  B(5.9, 0.35, 15.7, blk, 0, 2.05, -0.4);                // faldón negro
-  for (const [x, z] of [[-2.7, 6.9], [2.7, 6.9], [-2.7, -7.6], [2.7, -7.6]]) { B(0.5, 2.3, 0.5, dk, x, 1.3, z); B(1.0, 0.15, 1.0, dk, x, 0.08, z); }      // gatas niveladoras
-  // cabina adelante (lado izquierdo), oscura con vidrios y focos
-  B(2.4, 2.7, 2.4, cabC, -1.5, 3.95, 6.1);
-  B(2.0, 1.4, 0.08, glass, -1.5, 4.25, 7.32); B(0.08, 1.4, 1.9, glass, -2.72, 4.25, 6.1); B(0.08, 1.4, 1.9, glass, -0.28, 4.25, 6.1);
-  B(2.6, 0.18, 2.6, blk, -1.5, 5.4, 6.1);
-  for (const x of [-2.3, -0.7]) B(0.4, 0.3, 0.12, lite, x, 5.65, 7.25);
-  for (const x of [-2.3, -0.7]) B(0.35, 0.25, 0.1, lite, x, 3.0, 7.3);
-  // torre reticulada justo detrás de la cabina
-  const mx = 0.9, mz = 4.3, y0 = 2.6, w = 0.75;
-  for (const [cx, cz] of [[-w, -w], [w, -w], [-w, w], [w, w]]) B(0.22, mh, 0.22, yel, mx + cx, y0 + mh / 2, mz + cz);
-  for (let y = y0 + 1.0; y < y0 + mh; y += 1.5) {
-    B(2 * w + 0.15, 0.13, 0.13, yel, mx, y, mz - w); B(2 * w + 0.15, 0.13, 0.13, yel, mx, y, mz + w);
-    B(0.13, 0.13, 2 * w + 0.15, yel, mx - w, y + 0.75, mz); B(0.13, 0.13, 2 * w + 0.15, yel, mx + w, y + 0.75, mz);
-    const d = B(0.1, 1.7, 0.1, yel, mx + w, y + 0.75, mz); d.rotation.x = 0.8;
-    const d2 = B(0.1, 1.7, 0.1, yel, mx - w, y + 0.75, mz); d2.rotation.x = -0.8;
-  }
-  B(0.32, mh * 0.95, 0.32, dk, mx, y0 + mh * 0.48, mz);                  // barra
-  B(1.1, 1.3, 1.1, dk, mx, y0 + mh * 0.66, mz);                          // cabezal rotatorio
-  B(1.9, 0.9, 2.0, yel, mx, y0 + mh + 0.4, mz);                          // corona
-  B(1.6, 1.0, 1.4, blk, mx, 1.2, mz);                                    // mesa al pie de la torre
-  for (const sx of [-1, 1]) { const c = B(0.3, 7.4, 0.3, gray, mx + sx * 1.0, 5.8, mz - 2.65); c.rotation.x = 0.52; }      // gatos de levante de la torre
-  B(0.18, mh * 0.5, 0.18, dk, mx + 1.1, y0 + mh * 0.3, mz + 0.7);       // manguera
-  // compresor y sala de motor (atrás), con escapes
-  B(4.6, 2.2, 3.2, yel, 0.2, 3.7, 0.4);                                  // compresor
-  B(5.2, 3.0, 5.4, yel, 0, 4.1, -4.4);                                   // sala de motor
-  B(5.3, 0.25, 5.5, dk, 0, 5.7, -4.4);
-  for (let z = -6.6; z <= -2.4; z += 0.7) B(0.06, 2.2, 0.35, dk, 2.62, 4.0, z);      // rejillas
-  B(5.0, 2.6, 0.6, blk, 0, 4.0, -7.4);                                   // radiador
-  for (const x of [1.2, 1.9]) cyl(g, 0.18 * s, 0.18 * s, 3.4 * s, dk, x * s, 7.0 * s, -3.0 * s);      // escapes
-  // barandas a todo el largo y escalera diagonal bajando por el costado izquierdo
-  for (const [x0, z0, x1, z1] of [[-2.9, -7.9, -2.9, 4.8], [2.9, -7.9, 2.9, 7.3], [-2.9, -7.9, 2.9, -7.9]]) {
-    const dx = x1 - x0, dz = z1 - z0, L = Math.hypot(dx, dz);
-    B(Math.abs(dx) + 0.05, 0.06, Math.abs(dz) + 0.05, rail, (x0 + x1) / 2, 3.65, (z0 + z1) / 2);
-    B(Math.abs(dx) + 0.05, 0.05, Math.abs(dz) + 0.05, rail, (x0 + x1) / 2, 3.1, (z0 + z1) / 2);
-    for (let t = 0; t <= L; t += 1.3) B(0.05, 1.1, 0.05, rail, x0 + dx * t / L, 3.1, z0 + dz * t / L);
-  }
-  const st = B(0.9, 0.12, 4.2, yel, -3.4, 1.35, 3.4); st.rotation.x = -0.55;
-  for (let k = 0; k < 6; k++) B(0.9, 0.08, 0.3, dk, -3.4, 0.3 + k * 0.4, 1.8 + k * 0.62);
-  if (num) {      // número del equipo (placa lima): a los dos costados de la sala de motor y atrás
-    const P = (w, h, x, y, z, ry) => { const p = new THREE.Mesh(new THREE.PlaneGeometry(w * s, h * s), plateMat(num)); p.position.set(x * s, y * s, z * s); p.rotation.y = ry; g.add(p); };
-    P(2.4, 1.2, 2.64, 4.3, -4.4, Math.PI / 2); P(2.4, 1.2, -2.62, 4.3, -4.4, -Math.PI / 2); P(2.4, 1.2, 0, 4.6, -7.72, Math.PI);
-  }
-  return g;
 }
 const zpt = (s, u) => { const f = frame(s); return { x: f.x + f.rx * u, z: f.z + f.rz * u, f }; };
 function addHoles(list) {      // pozos de tronadura (instanciados): boca negra con su montón de detritus
@@ -1484,25 +1046,7 @@ function addHoles(list) {      // pozos de tronadura (instanciados): boca negra 
   });
   scene.add(cut); scene.add(hole);
 }
-const DRILL_NUMS = [403, 407, 401, 409, 405, 402, 408, 404, 406, 410]; let drillN = 0;      // perforadoras numeradas entre la 400 y la 410
-function buildCrawlerDrill(num) {      // perforadora de orugas compacta (martillo en cabeza): orugas grises, chasis negro, carrocería amarilla, cabina adelante, brazo y viga de avance inclinada con colector de polvo abajo
-  const g = new THREE.Group(), yel = lam(0xe8b20e, { map: grimeTex }), blk = lam(0x1e1f21), dk = lam(0x2c2d30), glass = lam(0x2d4250), gray = lam(0x8a8d90);
-  for (const sx of [-1, 1]) { box(g, 0.7, 0.9, 4.6, TRK, sx * 1.2, 0.45, 0); for (const z of [-2.3, 2.3]) { const w = cyl(g, 0.45, 0.45, 0.72, TRK, sx * 1.2, 0.45, z); w.rotation.z = Math.PI / 2; } for (let z = -2.1; z <= 2.1; z += 0.4) box(g, 0.74, 0.07, 0.2, TRK2, sx * 1.2, 0.92, z); }
-  box(g, 1.8, 0.5, 4.2, blk, 0, 1.05, 0);                                   // bastidor
-  box(g, 2.6, 1.6, 3.4, yel, 0.1, 2.1, -0.9); box(g, 2.62, 0.35, 3.42, blk, 0.1, 1.45, -0.9);      // motor y compresor
-  box(g, 2.0, 0.9, 1.0, blk, 0.3, 3.3, -1.9);                                // radiador arriba atrás
-  box(g, 1.3, 1.7, 1.5, yel, 0.6, 2.25, 1.6); box(g, 1.15, 0.9, 0.06, glass, 0.6, 2.5, 2.36); box(g, 0.06, 0.9, 1.2, glass, 1.26, 2.5, 1.6); box(g, 1.4, 0.15, 1.6, blk, 0.6, 3.15, 1.6);      // cabina
-  for (const z of [-2.3, 0.4]) box(g, 0.05, 0.8, 0.05, blk, -1.25, 3.3, z); box(g, 0.05, 0.05, 2.7, blk, -1.25, 3.7, -0.95);      // baranda
-  const arm = box(g, 0.4, 0.4, 3.0, dk, -0.5, 1.9, 2.7); arm.rotation.x = 0.35;      // brazo hacia adelante
-  const feed = new THREE.Group(); feed.position.set(-0.5, 1.2, 4.3); feed.rotation.x = -0.45; g.add(feed);      // viga de avance inclinada hacia adelante
-  box(feed, 0.5, 9.0, 0.45, gray, 0, 4.0, 0); box(feed, 0.25, 8.6, 0.25, blk, 0, 4.1, -0.35);      // viga y barra
-  for (const y of [1.5, 4.6, 8.3]) box(feed, 0.75, 0.45, 0.75, yel, 0, y, 0);      // centralizador, martillo y cabezal
-  box(feed, 1.3, 1.2, 1.1, blk, 0, -0.1, 0.1);                                // colector de polvo abajo
-  const hose = cyl(g, 0.09, 0.09, 4.5, blk, 0.2, 2.6, 2.6); hose.rotation.x = 0.8;
-  if (num) for (const sx of [1, -1]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.5), plateMat(num)); p.position.set(sx * 1.42, 2.3, -0.9); p.rotation.y = sx * Math.PI / 2; g.add(p); }
-  return g;
-}
-function placeDrill(x, z, yaw, pre) { OBST.push({ x, z, r: 6 }); const dr = buildDrill(pre, DRILL_NUMS[drillN++ % DRILL_NUMS.length]); dr.position.set(x, H(x, z) + 0.1, z); dr.rotation.y = yaw; scene.add(dr); }
+function placeDrill(x, z, yaw, pre) { OBST.push({ x, z, r: 6 }); const dr = buildDrill(pre, nextDrillNum()); dr.position.set(x, H(x, z) + 0.1, z); dr.rotation.y = yaw; scene.add(dr); }
 function pattern(pt, s0, s1, u0, u1, drills, skip) {      // malla escalonada 9 × 9 m (burden y espaciamiento típicos para bancos de 16 m)
   const out = [], st = u1 > u0 ? 9 : -9;
   for (let a = s0, row = 0; a <= s1; a += 9, row++) for (let b = u0 + (row % 2 ? st / 2 : 0); st > 0 ? b <= u1 : b >= u1; b += st) {
@@ -1526,7 +1070,7 @@ function buildDrills() {
     addHoles(holes); }
   for (const C of F7EQ.canchas) {
     placeDrill(C.dr.x, C.dr.z, hash(C.dr.x, C.dr.z) * 6.28, false);
-    if (C.crawler) { const q = C.crawler; OBST.push({ x: q.x, z: q.z, r: 6 }); const cd = buildCrawlerDrill(DRILL_NUMS[drillN++ % DRILL_NUMS.length]); cd.position.set(q.x, H(q.x, q.z), q.z); cd.rotation.y = 0.6; scene.add(cd); }
+    if (C.crawler) { const q = C.crawler; OBST.push({ x: q.x, z: q.z, r: 6 }); const cd = buildCrawlerDrill(nextDrillNum()); cd.position.set(q.x, H(q.x, q.z), q.z); cd.rotation.y = 0.6; scene.add(cd); }
   }
 }
 const LZ = [], DOZ = [];
@@ -1534,7 +1078,7 @@ const TOLVA_C = 2.2;      // centro de la tolva: 2,2 m detrás del origen del ca
 function mkLoadZone(x, z, fx, fz, num, phOff) {      // pala de cables cargando en su pila con un camión a cada lado (alterna)
   OBST.push({ x, z, r: 10 }); const sv = buildShovel(num); sv.g.position.set(x, H(x, z), z); sv.g.rotation.y = Math.atan2(fx, fz); scene.add(sv.g); sv.swing = 1;
   const tx = fz, tz = -fx, L = { sv, trucks: [], last: 0, off: phOff };
-  dumpTune(sv);
+  dumpTune(sv, H);
   for (const k of [0, 1]) {      // cada camión con el centro de su tolva bajo el balde (k = 0: lado al que gira con swing 1)
     sv.swing = k ? -1 : 1; shovelPose(sv, 4.0); sv.g.updateMatrixWorld(true); const bp = sv.bucket.getWorldPosition(new THREE.Vector3());
     const qx = bp.x - fx * TOLVA_C, qz = bp.z - fz * TOLVA_C, mesh = protoOnc.clone(true), pile = makePile(); mesh.add(pile);
@@ -1548,39 +1092,6 @@ function rockScatter(fn, n, seed) {
   for (let i = 0; i < n; i++) { const q = fn(hash(i, seed), hash(i, seed + 1)); if (!q) continue; const sc = 0.5 + hash(i, seed + 2) * 1.1, m = new THREE.Mesh(rockGeo, rm[i % 3]);
     m.scale.set(sc, sc * 0.7, sc); m.position.set(q.x, H(q.x, q.z) + sc * 0.2, q.z); m.rotation.set(hash(i, 4) * 3, hash(i, 5) * 3, hash(i, 6) * 3); scene.add(m); }
 }
-function buildWheelDozer() {      // wheel dozer tipo Cat 854K: bastidor articulado, 4 neumáticos de 3,2 m con tacos y llanta, capó atrás con escape y filtro, cabina ROPS al centro con baranda y escalera, hoja con brazos de empuje y cilindros de levante
-  const g = new THREE.Group(), yel = lam(0xe8b80c, { map: grimeTex }), dk = lam(0x1e1f22), tire = lam(0x151515), rim = lam(0xd9c25a), glass = lam(0x22313d), steel = lam(0x55585c), blk = lam(0x0c0c0c);
-  for (const z of [-2.7, 2.7]) for (const sx of [-1, 1]) { const x = sx * 2.0; cyl(g, 1.6, 1.6, 1.2, tire, x, 1.6, z, Math.PI / 2); cyl(g, 0.95, 0.95, 1.24, rim, x, 1.6, z, Math.PI / 2); cyl(g, 0.45, 0.45, 1.3, dk, x, 1.6, z, Math.PI / 2);
-    for (let a = 0; a < 8; a++) { const t = box(g, 0.32, 0.22, 1.2, blk, x + Math.cos(a * Math.PI / 4) * 1.56, 1.6 + Math.sin(a * Math.PI / 4) * 1.56, z); t.rotation.z = a * Math.PI / 4; } }      // tacos
-  box(g, 2.8, 1.5, 4.0, dk, 0, 1.8, -2.4); box(g, 3.2, 2.4, 3.2, yel, 0, 3.0, -3.3); box(g, 3.3, 1.3, 0.4, dk, 0, 2.9, -5.05);      // bastidor trasero, capó, parrilla
-  cyl(g, 0.18, 0.18, 1.6, dk, 0.9, 4.9, -3.9); box(g, 1.6, 0.5, 0.6, dk, -0.4, 4.4, -2.4);      // escape y filtro de aire
-  box(g, 1.2, 1.2, 1.2, dk, 0, 1.6, 0.1); box(g, 2.8, 1.3, 2.8, yel, 0, 1.9, 1.9);      // articulación y bastidor delantero
-  box(g, 2.4, 0.35, 2.3, yel, 0, 3.3, -0.9); for (const sx of [-1, 1]) for (const z of [-2.0, 0.2]) box(g, 0.18, 2.1, 0.18, dk, sx * 1.15, 4.45, z);      // piso y pilares ROPS
-  box(g, 2.2, 1.5, 0.06, glass, 0, 4.35, 0.25); box(g, 2.2, 1.5, 0.06, glass, 0, 4.35, -2.05); for (const sx of [-1, 1]) box(g, 0.06, 1.5, 2.1, glass, sx * 1.12, 4.35, -0.9);
-  box(g, 2.6, 0.25, 2.6, yel, 0, 5.6, -0.9); cyl(g, 0.16, 0.16, 0.28, bas(0xffb000), 0.9, 5.85, -0.9); for (const sx of [-1, 1]) box(g, 0.08, 0.6, 0.5, dk, sx * 1.55, 4.6, 0.2);      // techo, baliza, espejos
-  for (let y = 0.6; y < 3.2; y += 0.5) box(g, 0.5, 0.06, 0.06, steel, -1.7, y, -0.9); for (const sx of [-1, 1]) box(g, 0.05, 0.9, 2.8, steel, sx * 1.5, 4.3, -3.3);      // escalera y barandas
-  for (const sx of [-1, 1]) { const a = box(g, 0.4, 0.45, 3.6, yel, sx * 1.5, 1.5, 4.0); a.rotation.x = 0.1; const c = cyl(g, 0.14, 0.14, 2.6, steel, sx * 1.0, 2.9, 3.6); c.rotation.x = 1.1; }      // brazos y cilindros
-  box(g, 6.0, 2.4, 0.4, yel, 0, 1.75, 6.1); box(g, 6.0, 0.3, 0.55, steel, 0, 0.55, 6.15); for (const sx of [-1, 1]) box(g, 0.3, 2.3, 0.9, yel, sx * 2.9, 1.75, 5.85);      // hoja, cuchilla y aletas
-  return g;
-}
-function buildTrackDozer() {      // bulldozer de orugas tipo Cat D10: orugas altas con rodillos y zapatas, capó largo, cabina ROPS atrás, hoja semi-U con brazos y cilindros, desgarrador (ripper) atrás
-  const g = new THREE.Group(), yel = lam(0xe8b80c, { map: grimeTex }), dk = lam(0x1e1f22), glass = lam(0x22313d), steel = lam(0x55585c), blk = lam(0x0c0c0c);
-  for (const sx of [-1, 1]) { const x = sx * 1.6;
-    box(g, 0.95, 1.1, 4.6, TRK, x, 0.6, 0); box(g, 0.95, 0.9, 3.0, TRK, x, 2.0, -0.4);      // oruga: tramo bajo y tramo alto
-    cyl(g, 0.78, 0.78, 1.0, TRK2, x, 1.3, -2.3, Math.PI / 2); cyl(g, 0.65, 0.65, 1.0, TRK2, x, 1.2, 2.3, Math.PI / 2); cyl(g, 0.62, 0.62, 1.0, TRK2, x, 2.45, -0.5, Math.PI / 2);      // rueda motriz, tensora y superior
-    for (let z = -1.8; z <= 1.8; z += 0.6) cyl(g, 0.3, 0.3, 1.04, dk, x, 0.4, z, Math.PI / 2); for (let z = -2.2; z <= 2.2; z += 0.35) box(g, 1.0, 0.08, 0.14, blk, x, 1.17, z);      // rodillos y zapatas
-  }
-  box(g, 2.3, 1.0, 4.8, dk, 0, 1.4, 0); box(g, 2.6, 1.6, 3.0, yel, 0, 2.7, 1.3); box(g, 2.7, 1.2, 0.3, dk, 0, 2.6, 2.85);      // bastidor, capó, parrilla
-  cyl(g, 0.17, 0.17, 1.5, dk, 0.7, 4.1, 1.7); box(g, 0.5, 0.5, 0.5, dk, -0.7, 3.75, 1.7);      // escape y filtro
-  box(g, 2.4, 0.3, 2.2, yel, 0, 2.4, -1.3); for (const sx of [-1, 1]) for (const z of [-2.3, -0.3]) box(g, 0.18, 2.0, 0.18, dk, sx * 1.1, 3.5, z);      // piso y pilares ROPS
-  box(g, 2.1, 1.5, 0.06, glass, 0, 3.5, -0.3); box(g, 2.1, 1.5, 0.06, glass, 0, 3.5, -2.3); for (const sx of [-1, 1]) box(g, 0.06, 1.5, 1.9, glass, sx * 1.08, 3.5, -1.3);
-  box(g, 2.5, 0.25, 2.5, yel, 0, 4.6, -1.3); cyl(g, 0.16, 0.16, 0.28, bas(0xffb000), 0.8, 4.85, -1.3);      // techo y baliza
-  for (const sx of [-1, 1]) { box(g, 0.45, 0.5, 3.4, yel, sx * 2.0, 1.2, 3.5); const c = cyl(g, 0.16, 0.16, 2.4, steel, sx * 1.0, 3.0, 3.5); c.rotation.x = 1.0; }      // brazos de empuje y cilindros
-  box(g, 5.2, 2.3, 0.45, yel, 0, 1.6, 5.4); box(g, 5.2, 0.3, 0.6, steel, 0, 0.45, 5.45); for (const sx of [-1, 1]) { const w = box(g, 0.9, 2.3, 0.45, yel, sx * 2.85, 1.6, 5.05); w.rotation.y = sx * 0.5; }      // hoja semi-U con alas
-  box(g, 2.4, 0.5, 0.6, yel, 0, 1.9, -3.2); for (const sx of [-1, 1]) { const c = cyl(g, 0.14, 0.14, 1.6, steel, sx * 0.9, 2.5, -2.8); c.rotation.x = 0.7; }      // ripper: viga y cilindros
-  box(g, 0.35, 2.3, 0.5, dk, 0, 1.25, -3.8); box(g, 0.35, 0.5, 1.2, steel, 0, 0.3, -3.5);      // diente y punta
-  return g;
-}
 function addDozer(x, z, fx, fz, ph, track) { OBST.push({ x: x + fx * 8, z: z + fz * 8, r: 15 }); const g = track ? buildTrackDozer() : buildWheelDozer(); scene.add(g); DOZ.push({ g, x, z, fx, fz, tx: -fz, tz: fx, ph }); }      // trabaja en un paño de ~16 × 26 m hacia adelante
 function workSite(S, ux, uz, h0, sides) {      // lugar plano para el wheel dozer, fuera del radio de giro de la pala (≥ 36 m) y lejos de otros equipos
   const tx = -uz, tz = ux, ok = (x, z) => Math.abs(H(x, z) - h0) < 0.7 && !OBST.some(o => Math.hypot(o.x - x, o.z - z) < o.r + 3);
@@ -1591,38 +1102,6 @@ function workSite(S, ux, uz, h0, sides) {      // lugar plano para el wheel doze
     if (good) return { x: bx, z: bz, sg };
   }
   return null;
-}
-function buildHydShovel(num) {      // pala hidráulica grande tipo PC9000 (pala frontal): orugas grises, superestructura amarilla con cabina adelante a la izquierda, pluma y brazo con cilindros, balde frontal
-  const yel = lam(0xf0b90e, { map: grimeTex }), dk = lam(0x1f2023), blk = lam(0x2b2c2f), glass = lam(0x2d4250), rail = lam(0x161616), chrome = lam(0xc8c8c0), g = new THREE.Group();
-  for (const sx of [-1, 1]) { box(g, 2.0, 2.0, 10.6, TRK, sx * 3.6, 1.0, 0); for (const z of [-5.0, 5.0]) { const w = cyl(g, 1.0, 1.0, 2.05, TRK, sx * 3.6, 1.0, z); w.rotation.z = Math.PI / 2; }
-    for (let z = -4.8; z <= 4.8; z += 0.8) box(g, 2.1, 0.12, 0.42, TRK2, sx * 3.6, 2.03, z); box(g, 0.3, 1.0, 7.5, blk, sx * 4.62, 1.0, 0); }
-  box(g, 5.2, 1.6, 6.0, blk, 0, 1.9, 0); cyl(g, 3.0, 3.2, 0.6, dk, 0, 2.9, 0);
-  const house = new THREE.Group(); house.position.y = 3.2; g.add(house);
-  box(house, 8.6, 4.0, 9.6, yel, 0, 2.0, -1.4);                 // sala de máquinas (~8,6 m de ancho)
-  box(house, 8.7, 2.6, 2.0, yel, 0, 1.5, -6.9);                  // contrapeso
-  box(house, 8.0, 2.6, 0.1, GRILLE_MAT, 0, 2.6, -7.95);          // rejillas de los radiadores atrás
-  box(house, 2.8, 2.8, 3.0, yel, 2.7, 5.4, 2.0); box(house, 2.4, 1.5, 0.08, glass, 2.7, 5.7, 3.52); box(house, 0.08, 1.5, 2.4, glass, 4.12, 5.7, 2.0);      // cabina adelante a la izquierda (~9 m de alto)
-  box(house, 3.0, 2.2, 3.4, yel, -2.4, 5.1, -4.5);               // caseta de equipos arriba atrás
-  for (const z of [-6.0, -3.0, 0, 3.0]) for (const sx of [-1, 1]) box(house, 0.06, 1.1, 0.06, rail, sx * 4.25, 4.55, z);
-  for (const sx of [-1, 1]) box(house, 0.06, 0.06, 9.2, rail, sx * 4.25, 5.1, -1.5);
-  for (let k = 0; k < 7; k++) box(house, 1.0, 0.08, 0.35, rail, -4.7, 0.3 + k * 0.6, -6.0 + k * 0.45);      // escalera
-  if (num) for (const sx of [1, -1]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.8), plateMat(num)); p.position.set(sx * 4.32, 2.6, -2.5); p.rotation.y = sx * Math.PI / 2; house.add(p); }
-  const boom = new THREE.Group(); boom.position.set(0, 3.4, 3.4); house.add(boom);      // pluma de 10 m
-  box(boom, 2.2, 2.0, 10.4, yel, 0, 0, 5.0);
-  for (const sx of [-1, 1]) { const c = cyl(boom, 0.32, 0.32, 6.0, chrome, sx * 1.3, -1.0, 3.5); c.rotation.x = Math.PI / 2; }      // cilindros de la pluma
-  const stick = new THREE.Group(); stick.position.set(0, 0, 10); boom.add(stick);      // brazo de 6,5 m
-  box(stick, 1.7, 1.7, 6.9, yel, 0, 0, 3.1); { const c = cyl(stick, 0.28, 0.28, 5.0, chrome, 0, 1.2, 2.5); c.rotation.x = Math.PI / 2; }
-  const bucket = new THREE.Group(); bucket.position.set(0, 0, 6.5); stick.add(bucket);      // balde frontal (~5 m de ancho)
-  box(bucket, 5.0, 0.3, 3.8, yel, 0, -2.0, 1.4); for (const sx of [-1, 1]) box(bucket, 0.3, 3.6, 3.8, yel, sx * 2.5, -0.4, 1.4); box(bucket, 5.0, 3.6, 0.3, yel, 0, -0.4, -0.4);
-  for (let k = -2; k <= 2; k++) box(bucket, 0.4, 0.4, 0.8, lam(0x8a8d90), k * 1.0, -2.0, 3.6);      // dientes
-  const load = new THREE.Group(); bucket.add(load);
-  for (let k = 0; k < 8; k++) { const r = new THREE.Mesh(rockGeo, lam(k % 2 ? 0x6e5c49 : 0x8a7660)); const sc = 0.7 + 0.25 * (k % 3); r.scale.set(sc, sc * 0.7, sc); r.position.set((k % 4 - 1.5) * 1.1, -0.8 + (k % 2) * 0.5, 0.6 + Math.floor(k / 4) * 1.4); load.add(r); }
-  return { g, house, boom, stick, bucket, load };
-}
-function hydPose(S, psi, r, y, tilt) {      // r, y: punto del balde respecto del pie de la pluma (cinemática inversa de dos tramos)
-  const L1 = 10, L2 = 6.5, D = Math.min(L1 + L2 - 0.05, Math.hypot(r, y)), p1 = Math.atan2(y, r) + Math.acos(Math.min(1, (L1 * L1 + D * D - L2 * L2) / (2 * L1 * D)));
-  const p2 = Math.atan2(y - L1 * Math.sin(p1), r - L1 * Math.cos(p1));
-  S.house.rotation.y = psi; S.boom.rotation.x = -p1; S.stick.rotation.x = -(p2 - p1); S.bucket.rotation.x = p2 - tilt;
 }
 let HYD = null;
 function animOps(dt) {
@@ -1726,7 +1205,7 @@ function mkPlatform() {
   buildDrills(); buildOps();
   if (!P3_MOVED) { const sv = buildShovel(), p = _pl(SHOV_AL, SHOV_LA);
     sv.g.position.set(p.x, H(p.x, p.z), p.z); sv.g.rotation.y = Math.atan2(p.nx, p.nz); scene.add(sv.g); OBST.push({ x: p.x, z: p.z, r: 10 });
-    dumpTune(sv);
+    dumpTune(sv, H);
     {      // cada camión se cuadra con el centro de su tolva justo bajo el balde (donde descarga la pala al girar a ese lado)
       const las = [], fits = [];
       for (const i of [0, 1]) {
@@ -1888,7 +1367,7 @@ function drillAbove3_old() {      // pala 3: cancha de perforación en el piso d
   if (!D) D = Object.assign(P(-8, 74), { ao: -8, la: 74 });
   placeDrill(D.x, D.z, Math.atan2(s3.tx, s3.tz), false);
   { let q = null; for (const ao of [D.ao - 32, D.ao - 41, D.ao - 50, D.ao - 23]) { const p = P(ao, 63); if (ok(p, 4) && !OBST.some(o => Math.hypot(o.x - p.x, o.z - p.z) < o.r + 3)) { q = p; break; } }      // 408: dentro de la cancha, en la primera fila (burden de 9 m desde el banco)
-    if (q) { OBST.push({ x: q.x, z: q.z, r: 6 }); const cd = buildCrawlerDrill(DRILL_NUMS[drillN++ % DRILL_NUMS.length]); cd.position.set(q.x, H(q.x, q.z), q.z); cd.rotation.y = Math.atan2(-s3.nx, -s3.nz); scene.add(cd); DRILL3B = q; } }
+    if (q) { OBST.push({ x: q.x, z: q.z, r: 6 }); const cd = buildCrawlerDrill(nextDrillNum()); cd.position.set(q.x, H(q.x, q.z), q.z); cd.rotation.y = Math.atan2(-s3.nx, -s3.nz); scene.add(cd); DRILL3B = q; } }
   const holes = [];
   for (let la = 63, row = 0; la <= 90; la += 9, row++) for (let ao = -105 + (row % 2) * 4.5; ao <= D.ao - 7; ao += 9) {
     const p = P(ao + (hash(ao, la) - 0.5) * 0.8, la + (hash(la, ao) - 0.5) * 0.8);
@@ -2189,21 +1668,6 @@ function nearAuth() {
 /* Zona de la superficie: un camión queda detenido en tu pista con las luces de freno encendidas.
    Al autorizar, aparece un wheel dozer que retrocede hacia la pista contraria y deja un espacio entre él y el camión. */
 let zonaDoz = null;
-function buildDozer() {      // wheel dozer amarillo tipo CAT, con una roca empujada por la hoja
-  const g = new THREE.Group(), yel = lam(0xf2b400), dk = lam(0x1d1f22), glass = lam(0x2f4a5c), gris = lam(0x6b6f74);
-  box(g, 2.8, 1.5, 3.6, yel, 0, 1.6, -1.0);                  // chasis trasero
-  box(g, 2.6, 1.1, 1.8, yel, 0, 1.2, 1.8);                   // chasis delantero
-  box(g, 2.2, 1.3, 2.2, glass, 0, 3.2, -1.3);                // cabina con vidrios
-  box(g, 2.4, 0.12, 2.4, yel, 0, 3.92, -1.3);                // techo
-  cyl(g, 0.14, 0.14, 1.8, dk, 1.0, 3.2, -2.8);               // escape
-  box(g, 3.8, 1.3, 0.35, gris, 0, 0.9, 3.6);                 // hoja frontal
-  box(g, 0.25, 0.25, 2.0, dk, -1.1, 1.8, 2.6); box(g, 0.25, 0.25, 2.0, dk, 1.1, 1.8, 2.6);   // brazos
-  for (const x of [-1.5, 1.5]) for (const z of [-1.5, 1.7]) cyl(g, 1.2, 1.2, 0.9, dk, x, 1.2, z, Math.PI / 2);
-  cyl(g, 0.2, 0.2, 0.3, bas(0xffb000), 0, 4.1, -1.3);        // baliza
-  const roca = new THREE.Mesh(rockGeo, lam(0x7a6a58)); roca.scale.set(1.8, 1.4, 1.8); roca.position.set(0, 1.0, 5.6); g.add(roca);
-  g.scale.set(0.85, 0.85, 0.6);      // más ancho y alto que antes; largo igual
-  return g;
-}
 function spawnZona() {
   if (zonaDoz) { scene.remove(zonaDoz.mesh); zonaDoz = null; }
   const s = GAP ? GAP.a : L - 45;      // al inicio de la bahía de la pala 2
@@ -2214,7 +1678,7 @@ function spawnZona() {
   trucks.push({ id: 777, s, u: -LANE, v: 0, v0: 0, vInit: false, mesh, beacon: b, auth: false, passed: false, prevD: s - P.s, zona: true });
 }
 function startDozer(t) {      // al autorizar: el dozer aparece delante del camión y cruza de izquierda a derecha empujando la roca
-  zonaDoz = { mesh: buildDozer(), t: 0, s0: t.s + 22, s1: t.s + 22 };
+  zonaDoz = { mesh: buildDozerConRoca(), t: 0, s0: t.s + 22, s1: t.s + 22 };
   scene.add(zonaDoz.mesh);
 }
 function stepDozer(dt) {
@@ -2922,7 +2386,7 @@ function updateVisuals(dt) {
   }
   const pb = pickup.getObjectByName('beacon'); if (pb) pb.material.color.setHex(Math.sin(tAnim * 7) > 0 ? 0x3d8bff : 0x0a1c4d);
   for (const t of trucks) { if (t.merge) poseMerge(t); else place(t.mesh, t.s, t.u + (t.off || 0), 1, 0); blink(t.beacon, t.auth); }
-  for (const o of oncs) { place(o.mesh, o.s, o.u, -1, 0); blink(o.beacon, false); if (o.spray) { o.spray.visible = o.spraying; if (o.spraying) updateSpray(o.spray); } }
+  for (const o of oncs) { place(o.mesh, o.s, o.u, -1, 0); blink(o.beacon, false); if (o.spray) { o.spray.visible = o.spraying; if (o.spraying) updateSpray(o.spray, tAnim); } }
 
   animPlatform(dt);
   camMarker.visible = false; marker.visible = false;      // sin rombos ni triángulos sobre vehículos o rocas
@@ -2991,4 +2455,5 @@ function loop(now) {
 }
 resetGame(); camSnap = true;
 requestAnimationFrame(loop);
+
 
