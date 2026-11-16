@@ -1,13 +1,15 @@
-// Rajo Kart 26 — módulo principal. Importa configuración (js/config), datos (js/datos), utilidades (js/comun) y modelos de equipos (js/modelos); el resto se irá repartiendo en js/terreno, js/operaciones, js/juego y js/ui.
+// Rajo Kart 26 — módulo principal: geometría del rajo, terreno, camino, estado del juego, reglas, HUD, entradas y bucle. Importa config, datos, comun, modelos y operaciones (que leen el mundo compartido de js/mundo.js).
 import { TAU, PA, PB, YTOP, BENCH, WR, BLEND, PRET, LANE, CRASH_U, REQ_RANGE, SPEED_LIMIT, CRUISE, VTOP, FOLLOW_DIST, PCX, PCZ, PR, FLOOR, FRAD } from './config/diseno.js';
 import { ROUTE, F7POLY, RIMPOLY, FPOLY, SEC, SEM6, PATIOS } from './datos/caminos.js';
 import { D52 } from './datos/fase7.js';
-import { hash, sm01 } from './comun/mates.js';
+import { hash, inPoly } from './comun/mates.js';
 import { addPlates, bas, blob, box, brakeMat, cyl, lam, rockGeo } from './modelos/materiales.js';
-import { ALJ_PLATE, CAEX_PLATE, buildPickup, protoAlj, protoOnc, protoSame, updateSpray } from './modelos/camiones.js';
-import { buildHydShovel, buildShovel, dumpTune, hydPose, makePile, shovelPose } from './modelos/palas.js';
-import { buildCrawlerDrill, buildDrill, nextDrillNum } from './modelos/perforadoras.js';
-import { buildDozerConRoca, buildTrackDozer, buildWheelDozer } from './modelos/dozers.js';
+import { ALJ_PLATE, CAEX_PLATE, buildPickup, nextCaexId, protoAlj, protoOnc, protoSame, resetCaexIds, updateSpray } from './modelos/camiones.js';
+import { buildDozerConRoca } from './modelos/dozers.js';
+import { mundo as M, setWorldPose } from './mundo.js';
+import { onRoadC } from './operaciones/malla.js';
+import { animOps, buildDrills, buildOps } from './operaciones/carguio.js';
+import { buildCable2, buildPowerLine, buildSem6 } from './operaciones/cables.js';
 const PASOS = [];      // pasos de armado del mundo, en orden y con su tiempo (ms): para saber qué se ejecuta y cuánto cuesta
 function paso(nombre, fn) { const t0 = performance.now(); fn(); PASOS.push([nombre, Math.round(performance.now() - t0)]); }
 
@@ -39,7 +41,6 @@ function uTurn(P1, T1, P2, T2) {      // curva en U (Hermite) entre el final de 
 const SEC_FIXH = SEC.map(() => true);      // todos los caminos interiores llevan su cota calculada (10 % máx., con espacio para bancos y bermas entre ellos)
 const RIMP = ROUTE[ROUTE.length - 1], F7 = F7POLY;
 const PITC = { x: -14, z: -28 };      // centro aproximado del rajo
-function inPoly(x, z, P) { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, zi] = P[i], [xj, zj] = P[j]; if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) c = !c; } return c; }
 const inF7 = (x, z) => inPoly(x, z, F7);      // fase 7: la media luna del nororiente
 const lastOf = a => a[a.length - 1], tanEnd = a => dirOf(a[a.length - 2], a[a.length - 1]);
 const PRE = 0, POST = 205;          // 200 m de tramo previo a la pala (la partida empieza ahí); 205 m rectos tras el domo
@@ -129,7 +130,6 @@ paso('explanada: ubicación a media pista', () => {
 });
 { const kk = 40, side = [1, -1].find(sd => inF7(px[kk] - ptz[kk] * sd * 45, pz[kk] + ptx[kk] * sd * 45)) || 1;      // portón al comienzo de la ruta, del lado de la fase 7
   PLAT = { se: -15, side, D: 30, HL: 60, k: 0, diff: 0, clear: 0, curv: 0 }; }
-const P3_MOVED = true;      // la pala 3 trabaja en el centro de la fase 7 (ya no junto a la Rampa Sur)
 const H7 = BENCH * Math.round(hr[PLAT.k] / BENCH);      // cota del piso de la fase 7: la del camino junto a la pala 3 (la bahía sale a nivel)
 const F7A = { x: -202.5, z: -580.5 }, F7HN = -80;      // la fase 7 baja de a poco desde su extremo norponiente (F7HN) hasta el portón (H7), como en la mina
 function f7h(x, z) { const bx = ROUTE[0][0] - F7A.x, bz = ROUTE[0][1] - F7A.z, t = Math.max(0, Math.min(1, ((x - F7A.x) * bx + (z - F7A.z) * bz) / (bx * bx + bz * bz))); return H7 + (F7HN - H7) * (1 - t); }
@@ -384,27 +384,6 @@ paso('terreno: membrana entre celdas fijas (caminos, pisos, superficie) y cuenca
       if (dist < 14 && Math.sqrt(bd) < GD[iz * GNX + ix] + 6) {      // solo celdas cuyo tramo más cercano es el de la zona (no otro tramo del camino)
         const i = iz * GNX + ix;
         if (dist < 0) { GH[i] = hr[bi]; GD[i] = -1; } else { const w = dist / 14, sw = w * w * (3 - 2 * w); GH[i] = hr[bi] * (1 - sw) + GH[i] * sw; }
-      }
-    }
-  }
-  if (PLAT && !P3_MOVED) {            // banco del cerro detrás de la explanada: escarpe de 14 m donde la pala cava (no se saca mineral del camino)
-    const k0 = Math.max(0, PLAT.k - PLAT.HL - 20), k1 = Math.min(NS, PLAT.k + PLAT.HL + 20);
-    let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
-    for (let k = k0; k <= k1; k += 4) for (const b of [WR + PLAT.D + 2, WR + PLAT.D + 26]) {
-      const x = px[k] - ptz[k] * PLAT.side * b, z = pz[k] + ptx[k] * PLAT.side * b;
-      x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
-    }
-    const i0 = Math.max(0, Math.floor((x0 - GX0) / CELL)), i1 = Math.min(GNX - 1, Math.ceil((x1 - GX0) / CELL));
-    const j0 = Math.max(0, Math.floor((z0 - GZ0) / CELL)), j1 = Math.min(GNZ - 1, Math.ceil((z1 - GZ0) / CELL));
-    for (let iz = j0; iz <= j1; iz++) for (let ix = i0; ix <= i1; ix++) {
-      const x = GX0 + ix * CELL, z = GZ0 + iz * CELL; let bi = k0, bd = 1e9;
-      for (let k = k0; k <= k1; k++) { const dx = px[k] - x, dz = pz[k] - z, d2 = dx * dx + dz * dz; if (d2 < bd) { bd = d2; bi = k; } }
-      const la = ((x - px[bi]) * -ptz[bi] + (z - pz[bi]) * ptx[bi]) * PLAT.side, al = bi - PLAT.k;
-      if (Math.abs(al) < PLAT.HL + 10 && la > WR + PLAT.D + 2 && Math.sqrt(bd) < GD[iz * GNX + ix] + 6) {      // no levanta otros tramos del camino
-        const i = iz * GNX + ix, e = la - (WR + PLAT.D + 1);      // frente de trabajo: pie al nivel del piso, talud de material tronado (~40°, irregular) y arriba la pared alta de roca in situ hasta el banco de arriba
-        const muck = Math.min(10, e * 0.85) + 1.1 * Math.sin(x * 0.9 + z * 0.4) * Math.sin(z * 0.7 - x * 0.3) * Math.min(1, e / 3) * Math.max(0, 1 - (e - 9) / 3);
-        const wall = e > 11.5 ? 5 * Math.min(1, (e - 11.5) / 1.5) : 0;
-        GH[i] = e > 13 ? Math.max(GH[i], hr[bi] + BENCH) : Math.max(hr[bi], hr[bi] + Math.max(0, muck) + wall); if (e < 12) GD[i] = -2;      // detrás de la pared alta sigue el cerro (si es más alto)
       }
     }
   }
@@ -976,7 +955,7 @@ const marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.9), new THREE.MeshB
 const keys = { up: false, down: false, left: false, right: false };
 const P = { s: 10, u: -LANE, v: 0, vu: 0, y: 0 };
 const OBST = [];      // equipos detenidos en las bahías (x, z, radio): en el tránsito libre no se pueden atravesar
-let free = null, GATE = null, CABLE = null, CABLE2 = null, DRILL3B = null;      // GATE: entrada a la Rampa Sur desde la fase 7, entre dos postes pasacables (cable de la pala 3 por arriba)      // tránsito libre por la fase 7 antes de tomar la Rampa Sur: { x, z, a }
+let free = null;      // tránsito libre por la fase 7 antes de tomar la Rampa Sur: { x, z, a }
 const trucks = [], oncs = [], rocks = [], rocasPista = [];
 let mode = 'menu', tGame = 0, tAnim = 0, overtakes = 0, spawnT = 8, wrongT = 0, beepT = 0, bannerT = 0;
 let radioTimer = 0, shake = 0, aljT = 0, rockT = 6, pickT = 20, skidT = 0, camBeepT = 0, gapBeepT = 0, crashSide = 0, crashT = 0, fall = null, crashFall = false, crush = null, intro = null, arrive = null;
@@ -1010,446 +989,10 @@ function mkAlj(s) {
   addPlates(mesh, 703, ALJ_PLATE.f, ALJ_PLATE.r, ALJ_PLATE.s);
   return { s, u: LANE, v0: 4.2, v: 4.2, kind: 'aljibe', cl: 7.8, cw: 4.2, mesh, beacon: b, spray: mesh.getObjectByName('spray'), cyc: 0, spraying: true };
 }
-/* ───────────── Explanada: palas de cable cargando camiones; de vez en cuando uno sale al camino ───────────── */
-const SHOV_T = 7.2, SHOV_AL = -20, SPOT_AL = [SHOV_AL - 24, SHOV_AL + 24], SHOV_LA = WR + 17, ARR_LA = WR + 2; let SPOT_LA = WR + 13;      // SPOT_AL / SPOT_LA se ajustan al alcance real del balde al armar la explanada      // la pala, metida en el frente de la derecha; los camiones cargan a su izquierda y a su derecha (llegan por la orilla del camino)
-const plat = { shov: [], loaders: [], merging: false, nid: 220, cool: [0, 0] };
-let capNum = 100;      // numeración de CAEX: siempre del 101 al 173
-const nextCaexId = () => { capNum = capNum >= 173 ? 101 : capNum + 1; return capNum; };
-const _pl = (al, la) => { const f = frame(PLAT.se + al); return { x: f.x + f.rx * PLAT.side * la, z: f.z + f.rz * PLAT.side * la, tx: f.tx, tz: f.tz, nx: f.rx * PLAT.side, nz: f.rz * PLAT.side }; };
-function setWorldPose(mesh, x, z, dx, dz) {
-  const y = H(x, z) + 0.1; mesh.position.set(x, y, z);
-  const sl = (H(x + dx * 3, z + dz * 3) - H(x - dx * 3, z - dz * 3)) / 6;
-  _look.set(x + dx, y + sl, z + dz); mesh.lookAt(_look);
-}
-function bezAt(b, t) {
-  const m = 1 - t, a = m * m * m, c = 3 * m * m * t, d = 3 * m * t * t, e = t * t * t;
-  return { x: a * b[0].x + c * b[1].x + d * b[2].x + e * b[3].x, z: a * b[0].z + c * b[1].z + d * b[2].z + e * b[3].z };
-}
-function worldToSU(x, z, sh) {
-  let bs = sh, bd = 1e9;
-  for (let s = sh - 25; s <= sh + 40; s += 1) { const f = frame(s), d = (f.x - x) ** 2 + (f.z - z) ** 2; if (d < bd) { bd = d; bs = s; } }
-  const f = frame(bs); return { s: bs, u: (x - f.x) * f.rx + (z - f.z) * f.rz };
-}
-function mkLoaderTruck(al, spot) {
-  const mesh = protoOnc.clone(true), b = mesh.getObjectByName('beacon'); b.material = b.material.clone();
-  const pile = makePile(); pile.scale.y = 0.05; mesh.add(pile);
-  const num = nextCaexId(); addPlates(mesh, num, CAEX_PLATE.f, CAEX_PLATE.r, CAEX_PLATE.s); scene.add(mesh);
-  return { mesh, pile, beacon: b, al, la: ARR_LA, spot, num, state: 'arrive', fill: 0, wait: 0 };
-}
-const zpt = (s, u) => { const f = frame(s); return { x: f.x + f.rx * u, z: f.z + f.rz * u, f }; };
-function addHoles(list) {      // pozos de tronadura (instanciados): boca negra con su montón de detritus
-  const d = new THREE.Object3D(), hole = new THREE.InstancedMesh(new THREE.CircleGeometry(0.55, 12), lam(0x121212), list.length), cut = new THREE.InstancedMesh(new THREE.ConeGeometry(1.3, 0.45, 10), lam(0x9b9486), list.length);
-  list.forEach((p, i) => {
-    const y = H(p.x, p.z);
-    d.position.set(p.x, y + 0.2, p.z); d.rotation.set(0, 0, 0); d.updateMatrix(); cut.setMatrixAt(i, d.matrix);
-    d.position.set(p.x, y + 0.46, p.z); d.rotation.set(-Math.PI / 2, 0, 0); d.updateMatrix(); hole.setMatrixAt(i, d.matrix);
-  });
-  scene.add(cut); scene.add(hole);
-}
-function placeDrill(x, z, yaw, pre) { OBST.push({ x, z, r: 6 }); const dr = buildDrill(pre, nextDrillNum()); dr.position.set(x, H(x, z) + 0.1, z); dr.rotation.y = yaw; scene.add(dr); }
-function pattern(pt, s0, s1, u0, u1, drills, skip) {      // malla escalonada 9 × 9 m (burden y espaciamiento típicos para bancos de 16 m)
-  const out = [], st = u1 > u0 ? 9 : -9;
-  for (let a = s0, row = 0; a <= s1; a += 9, row++) for (let b = u0 + (row % 2 ? st / 2 : 0); st > 0 ? b <= u1 : b >= u1; b += st) {
-    if (drills.some(([da, db]) => Math.hypot(da - a, db - b) < 7) || (skip && skip(a, b))) continue;
-    const p = pt(a + (hash(a, b) - 0.5) * 0.8, b + (hash(b, a) - 0.5) * 0.8); if (p) out.push(p);
-  }
-  return out;
-}
-function buildDrills() {
-  const gd = (x, z) => { const fx = Math.round((x - GX0) / CELL), fz = Math.round((z - GZ0) / CELL); return (fx < 0 || fz < 0 || fx >= GNX || fz >= GNZ) ? 99 : GD[fz * GNX + fx]; };
-  const flat = (x, z) => { if (gd(x, z) !== -1 || OBST.some(o => Math.hypot(o.x - x, o.z - z) < o.r + 12)) return false; for (let a = 0; a < 8; a++) if (gd(x + Math.cos(a * 0.785) * 10, z + Math.sin(a * 0.785) * 10) !== -1) return false; return true; };
-  const snap = (x, z) => { for (let r = 0; r <= 120; r += 3) for (let a = 0; a < 24; a++) { const q = { x: x + Math.cos(a * TAU / 24) * r, z: z + Math.sin(a * TAU / 24) * r }; if (flat(q.x, q.z)) return q; } return { x, z }; };      // piso plano más cercano (nunca en la cara de un banco)
-  // fase 7: tres canchas de perforación (malla 9 × 9 m) con su perforadora en el borde; en la del centro también la de orugas
-  { const holes = [], dr = F7EQ.canchas.flatMap(C => [C.dr, C.crawler].filter(Boolean)), B = 8, S = 9.2;      // malla tresbolillo 8 × 9,2 m (burden × espaciamiento, S ≈ 1,15 B, pozos de 10⅝–12¼" en banco de 16 m), filas paralelas al eje largo de la cancha y primera fila a un burden de la cresta
-    for (const f of RED52) { const P = f.P, n = P.length, cx = P.reduce((s, p) => s + p[0], 0) / n, cz = P.reduce((s, p) => s + p[1], 0) / n;
-      let sxx = 0, sxz = 0, szz = 0; for (const p of P) { const dx = p[0] - cx, dz = p[1] - cz; sxx += dx * dx; sxz += dx * dz; szz += dz * dz; }
-      const th = 0.5 * Math.atan2(2 * sxz, sxx - szz), ux = Math.cos(th), uz = Math.sin(th), vx = -uz, vz = ux;      // eje principal de la cancha
-      let a0 = 1e9, a1 = -1e9, b0 = 1e9, b1 = -1e9; for (const p of P) { const a = (p[0] - cx) * ux + (p[1] - cz) * uz, b = (p[0] - cx) * vx + (p[1] - cz) * vz; a0 = Math.min(a0, a); a1 = Math.max(a1, a); b0 = Math.min(b0, b); b1 = Math.max(b1, b); }
-      for (let b = b0, row = 0; b <= b1; b += B, row++) for (let a = a0 + (row % 2) * S / 2; a <= a1; a += S) { const px = cx + ux * a + vx * b + (hash(a, b) - 0.5) * 0.6, pz = cz + uz * a + vz * b + (hash(b, a) - 0.5) * 0.6;
-        if (f(px, pz) > -B || gd(px, pz) !== -1 || Math.abs(H(px, pz) - f7h(px, pz) - PAD_UP) > 0.6 || dr.some(q => Math.hypot(q.x - px, q.z - pz) < 8)) continue; holes.push({ x: px, z: pz }); } }
-    addHoles(holes); }
-  for (const C of F7EQ.canchas) {
-    placeDrill(C.dr.x, C.dr.z, hash(C.dr.x, C.dr.z) * 6.28, false);
-    if (C.crawler) { const q = C.crawler; OBST.push({ x: q.x, z: q.z, r: 6 }); const cd = buildCrawlerDrill(nextDrillNum()); cd.position.set(q.x, H(q.x, q.z), q.z); cd.rotation.y = 0.6; scene.add(cd); }
-  }
-}
-const LZ = [], DOZ = [];
-const TOLVA_C = 2.2;      // centro de la tolva: 2,2 m detrás del origen del camión (camión escalado)
-function mkLoadZone(x, z, fx, fz, num, phOff) {      // pala de cables cargando en su pila con un camión a cada lado (alterna)
-  OBST.push({ x, z, r: 10 }); const sv = buildShovel(num); sv.g.position.set(x, H(x, z), z); sv.g.rotation.y = Math.atan2(fx, fz); scene.add(sv.g); sv.swing = 1;
-  const tx = fz, tz = -fx, L = { sv, trucks: [], last: 0, off: phOff };
-  dumpTune(sv, H);
-  for (const k of [0, 1]) {      // cada camión con el centro de su tolva bajo el balde (k = 0: lado al que gira con swing 1)
-    sv.swing = k ? -1 : 1; shovelPose(sv, 4.0); sv.g.updateMatrixWorld(true); const bp = sv.bucket.getWorldPosition(new THREE.Vector3());
-    const qx = bp.x - fx * TOLVA_C, qz = bp.z - fz * TOLVA_C, mesh = protoOnc.clone(true), pile = makePile(); mesh.add(pile);
-    addPlates(mesh, nextCaexId(), CAEX_PLATE.f, CAEX_PLATE.r, CAEX_PLATE.s); scene.add(mesh); setWorldPose(mesh, qx, qz, -fx, -fz); OBST.push({ x: qx, z: qz, r: 8 });      // de cola a la pila
-    const fill = k ? 0.6 : 0.2; pile.scale.y = 0.05 + 0.95 * fill; L.trucks.push({ pile, fill });
-  }
-  LZ.push(L);
-}
-function rockScatter(fn, n, seed) {
-  const rm = [lam(0x6e5c49), lam(0x8a7660), lam(0x574a3b)];
-  for (let i = 0; i < n; i++) { const q = fn(hash(i, seed), hash(i, seed + 1)); if (!q) continue; const sc = 0.5 + hash(i, seed + 2) * 1.1, m = new THREE.Mesh(rockGeo, rm[i % 3]);
-    m.scale.set(sc, sc * 0.7, sc); m.position.set(q.x, H(q.x, q.z) + sc * 0.2, q.z); m.rotation.set(hash(i, 4) * 3, hash(i, 5) * 3, hash(i, 6) * 3); scene.add(m); }
-}
-function addDozer(x, z, fx, fz, ph, track) { OBST.push({ x: x + fx * 8, z: z + fz * 8, r: 15 }); const g = track ? buildTrackDozer() : buildWheelDozer(); scene.add(g); DOZ.push({ g, x, z, fx, fz, tx: -fz, tz: fx, ph }); }      // trabaja en un paño de ~16 × 26 m hacia adelante
-function workSite(S, ux, uz, h0, sides) {      // lugar plano para el wheel dozer, fuera del radio de giro de la pala (≥ 36 m) y lejos de otros equipos
-  const tx = -uz, tz = ux, ok = (x, z) => Math.abs(H(x, z) - h0) < 0.7 && !OBST.some(o => Math.hypot(o.x - x, o.z - z) < o.r + 3);
-  for (const d of [42, 46, 38, 50, 54, 36, 58, 32, 28]) for (const sg of sides) for (const uo of [0, 4, -4, 8, -8, -14, -20, -28, -36, -44]) {      // también más atrás de la pala si al costado no hay piso
-    if (Math.hypot(d, uo) < 36) continue;
-    const bx = S.x + tx * sg * d + ux * uo, bz = S.z + tz * sg * d + uz * uo; let good = true;
-    for (let al = -5; al <= 20 && good; al += 5) for (let la = -10; la <= 10 && good; la += 5) if (!ok(bx + ux * al + tx * la, bz + uz * al + tz * la)) good = false;
-    if (good) return { x: bx, z: bz, sg };
-  }
-  return null;
-}
-let HYD = null;
-function animOps(dt) {
-  if (HYD) {      // pala hidráulica frontal: cava en la pila, levanta, gira 90° al camión de su costado, descarga sobre la tolva y vuelve (ciclo ~22 s; 4 pases llenan el camión)
-    const Q = HYD, T = 22, ph = (tAnim + 3) % T, was = Q.prev || 0; Q.prev = ph;
-    const G = -Math.PI / 2, K = [[0, 0, 8.0, -5.0, 0], [4, 0, 10.0, -2.5, 0.5], [7, 0, 10.0, 3.5, 0.6], [11, G, 10.6, 3.3, 0.6], [12.5, G, 10.6, 3.3, -0.9], [15, G, 10.6, 3.3, -0.9], [19, 0, 9.0, 1.0, 0], [22, 0, 8.0, -5.0, 0]];
-    let k = 0; while (k < K.length - 2 && ph >= K[k + 1][0]) k++; const A = K[k], B = K[k + 1], s = sm01((ph - A[0]) / (B[0] - A[0]));
-    hydPose(Q.S, A[1] + (B[1] - A[1]) * s, A[2] + (B[2] - A[2]) * s, A[3] + (B[3] - A[3]) * s, A[4] + (B[4] - A[4]) * s);
-    Q.S.load.visible = ph > 3 && ph < 14;
-    if (was < 14 && ph >= 14) { Q.fill += 0.25; if (Q.fill > 1.01) Q.fill = 0.05; }
-    Q.pile.scale.y += ((0.05 + 0.95 * Math.min(1, Q.fill)) - Q.pile.scale.y) * Math.min(1, dt * 3);
-  }
-  for (const L of LZ) {
-    const sv = L.sv, ph = (tAnim + L.off) % SHOV_T, was = sv.prev || 0; sv.prev = ph;
-    if (was > ph) { L.last = 1 - L.last; sv.swing = L.last ? 1 : -1; }      // alterna entre los dos camiones
-    if (was < 4.1 && ph >= 4.1) { const t = L.trucks[sv.swing > 0 ? 0 : 1]; t.fill += 0.2; if (t.fill > 1.01) t.fill = 0.05; }      // lleno: sale y llega otro vacío
-    shovelPose(sv, ph);
-    for (const t of L.trucks) t.pile.scale.y += ((0.05 + 0.95 * Math.min(1, t.fill)) - t.pile.scale.y) * Math.min(1, dt * 3);
-  }
-  for (const D of DOZ) {      // el dozer ordena el banco: empuja hacia la pila (o el frente), retrocede y se corre a la pasada siguiente
-    const PER = 11, LN = [-6, 0, 6, 0], t = (tAnim + D.ph * 7) % (PER * 4), k = Math.floor(t / PER), q = (t % PER) / PER, l0 = LN[k], l1 = LN[(k + 1) % 4];
-    let al, la, fx = D.fx, fz = D.fz;
-    if (q < 0.55) { al = 14 * sm01(q / 0.55); la = l0; }
-    else { const r = (q - 0.55) / 0.45, w = Math.sin(Math.PI * r) * (l1 - l0) * 0.12; al = 14 * (1 - sm01(r)); la = l0 + (l1 - l0) * sm01(r); fx = D.fx - D.tx * w; fz = D.fz - D.tz * w; const n = Math.hypot(fx, fz); fx /= n; fz /= n; }
-    let X = D.x + D.fx * al + D.tx * la, Z = D.z + D.fz * al + D.tz * la;
-    if (D.p3) {      // pala 3: si no hay camión a su derecha (o el que viene está lejos), empuja material hasta cerca del balde y vuelve antes que llegue el siguiente
-      const C = D.p3, lt = plat.loaders.find(l => l.spot === 0), free = !lt || (lt.state === 'arrive' && lt.al < SPOT_AL[0] - 30), e0 = C.e;
-      C.e = Math.max(0, Math.min(1, C.e + (free ? dt / 10 : -dt / 7)));
-      if (C.e > 0) { const s = sm01(C.e), tx = C.T.x - X, tz = C.T.z - Z, tn = Math.hypot(tx, tz) || 1; X += tx * s; Z += tz * s; fx = fx * (1 - s) + tx / tn * s; fz = fz * (1 - s) + tz / tn * s; const n = Math.hypot(fx, fz) || 1; fx /= n; fz /= n; }
-      C.load.visible = C.e > e0 && C.e < 0.98;      // con material en la hoja mientras va hacia la pala
-    }
-    setWorldPose(D.g, X, Z, fx, fz);
-  }
-}
-function floorPath(S, T) {      // huellas: camino más corto por el piso (o calzada) entre S y T, manteniéndose ~15 m lejos de paredes, pilas, canchas y equipos
-  const pad = 260, i0 = Math.max(1, Math.floor((Math.min(S.x, T.x) - pad - GX0) / CELL)), i1 = Math.min(GNX - 2, Math.ceil((Math.max(S.x, T.x) + pad - GX0) / CELL)), j0 = Math.max(1, Math.floor((Math.min(S.z, T.z) - pad - GZ0) / CELL)), j1 = Math.min(GNZ - 2, Math.ceil((Math.max(S.z, T.z) + pad - GZ0) / CELL));
-  const W = i1 - i0 + 1, Hh = j1 - j0 + 1, N = W * Hh, pass = new Uint8Array(N), cost = new Float32Array(N);
-  const blk = OBST.filter(o => o.r >= 6);
-  for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) { const g = GD[(j + j0) * GNX + i + i0]; pass[j * W + i] = (g === -1 || (g >= 0 && g <= WR + 2)) ? 1 : 0; }
-  for (const o of blk) { const r = o.r + 6, ci = Math.round((o.x - GX0) / CELL) - i0, cj = Math.round((o.z - GZ0) / CELL) - j0, n = Math.ceil(r / CELL); for (let dj = -n; dj <= n; dj++) for (let di = -n; di <= n; di++) { const i = ci + di, j = cj + dj; if (i < 0 || j < 0 || i >= W || j >= Hh || Math.hypot(di, dj) * CELL > r) continue; pass[j * W + i] = 0; } }
-  for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) { if (!pass[j * W + i]) continue; let n = 0; for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) { const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= W || b >= Hh || !pass[b * W + a]) n++; } cost[j * W + i] = 1 + 0.5 * n; }
-  const ci = p => (Math.max(0, Math.min(Hh - 1, Math.round((p.z - GZ0) / CELL) - j0))) * W + Math.max(0, Math.min(W - 1, Math.round((p.x - GX0) / CELL) - i0));
-  const s = ci(S), t = ci(T); pass[s] = pass[t] = 1; if (!cost[s]) cost[s] = 1; if (!cost[t]) cost[t] = 1;
-  const g = new Float32Array(N).fill(Infinity), from = new Int32Array(N).fill(-1), done = new Uint8Array(N), hp = [], hv = [];
-  const push = (i, f) => { hp.push(i); hv.push(f); let k = hp.length - 1; while (k > 0) { const q = (k - 1) >> 1; if (hv[q] <= hv[k]) break; [hp[q], hp[k]] = [hp[k], hp[q]]; [hv[q], hv[k]] = [hv[k], hv[q]]; k = q; } };
-  const pop = () => { const top = hp[0], li = hp.pop(), lv = hv.pop(); if (hp.length) { hp[0] = li; hv[0] = lv; let k = 0; for (;;) { const l = 2 * k + 1, r = l + 1; let m = k; if (l < hp.length && hv[l] < hv[m]) m = l; if (r < hp.length && hv[r] < hv[m]) m = r; if (m === k) break; [hp[m], hp[k]] = [hp[k], hp[m]]; [hv[m], hv[k]] = [hv[k], hv[m]]; k = m; } } return top; };
-  g[s] = 0; push(s, 0);
-  while (hp.length) { const i = pop(); if (done[i]) continue; done[i] = 1; if (i === t) break; const x = i % W, z = (i / W) | 0;
-    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { if (!di && !dj) continue; const a = x + di, b = z + dj; if (a < 0 || b < 0 || a >= W || b >= Hh) continue; const k = b * W + a; if (!pass[k] || done[k]) continue; const nv = g[i] + cost[k] * Math.hypot(di, dj); if (nv < g[k]) { g[k] = nv; from[k] = i; push(k, nv); } } }
-  if (from[t] < 0 && t !== s) return null;
-  const out = []; for (let i = t; i >= 0; i = from[i]) { out.push({ x: GX0 + (i % W + i0) * CELL, z: GZ0 + ((i / W | 0) + j0) * CELL }); if (i === s) break; }
-  out.reverse(); const keep = [out[0]]; for (let k = 1; k < out.length - 1; k += 3) keep.push(out[k]); keep.push(out[out.length - 1]); return keep;
-}
-function drawTracks(pts) {      // huellas de camión: dos surcos oscuros (ruedas) siguiendo una curva suave por el piso
-  if (!pts || pts.length < 2) return;
-  const c = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p.x, 0, p.z))); c.curveType = 'centripetal'; const N = Math.max(24, Math.round(c.getLength() / 3));
-  for (const off of [-1.7, 1.7]) { const pos = []; for (let k = 0; k <= N; k++) { const p = c.getPoint(k / N), t = c.getTangent(k / N), nx = -t.z, nz = t.x, y = H(p.x, p.z) + 0.06; pos.push(p.x + nx * (off - 0.45), y, p.z + nz * (off - 0.45), p.x + nx * (off + 0.45), y, p.z + nz * (off + 0.45)); }
-    const g = new THREE.BufferGeometry(), idx = []; for (let k = 0; k < N; k++) idx.push(2 * k, 2 * k + 1, 2 * k + 2, 2 * k + 1, 2 * k + 3, 2 * k + 2); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
-    scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x2c2a27, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4 }))); }
-}
-function buildOps() {
-  {      // fase 7: pala hidráulica PC9000 junto a la pala 6, cargando un camión a la vez a su costado
-    const Q = F7EQ.pc, tx = -Q.fz, tz = Q.fx, S = buildHydShovel('4'); S.g.position.set(Q.x, H(Q.x, Q.z), Q.z); S.g.rotation.y = Math.atan2(Q.fx, Q.fz); scene.add(S.g); OBST.push({ x: Q.x, z: Q.z, r: 9 });
-    const t = { x: Q.x - Q.fx * 2.2 + tx * 14, z: Q.z - Q.fz * 2.2 + tz * 14 }, mesh = protoOnc.clone(true), pile = makePile(); mesh.add(pile); addPlates(mesh, nextCaexId(), CAEX_PLATE.f, CAEX_PLATE.r, CAEX_PLATE.s); scene.add(mesh); setWorldPose(mesh, t.x, t.z, -Q.fx, -Q.fz); OBST.push({ x: t.x, z: t.z, r: 8 });
-    HYD = { S, pile, fill: 0.3, prev: 0 }; hydPose(S, 0, 8.0, -5.0, 0);
-  }
-  {      // fondo mina (180 × 100 m): dos palas de cables cargando en sus pilas, dos canchas de perforación, un dozer y huellas de camiones
-    const P = PIT, W = (a, b) => ({ x: P.x + P.ux * a * 1.5 + P.tx * b * 1.5, z: P.z + P.uz * a * 1.5 + P.tz * b * 1.5 }), inF = (a, b) => [[0, 0], [8, 0], [-8, 0], [0, 8], [0, -8]].every(([da, db]) => { const q = W(a + da / 1.5, b + db / 1.5); return gdAt(q.x, q.z) === -1 && Math.abs(H(q.x, q.z) - FLOOR - PAD_UP) < 0.3; });      // sobre la cancha y a un burden de la cresta
-    { const q = W(-112, 0); PIT.p1 = { x: q.x, z: q.z, fx: -P.ux, fz: -P.uz }; mkLoadZone(q.x, q.z, -P.ux, -P.uz, '1', 4.6); }
-    { const q = W(40, 60); PIT.p5 = { x: q.x, z: q.z, fx: P.tx, fz: P.tz }; mkLoadZone(q.x, q.z, P.tx, P.tz, '5', 1.2); }      // pala 5 al pie de su pila (21 m del centro de la bahía)
-    const cancha = (a0, a1, b0, b1, dr) => { const holes = []; for (let a = a0, row = 0; a <= a1; a += 8 / 1.5, row++) for (let b = b0 + (row % 2) * 4.6 / 1.5; b <= b1; b += 9.2 / 1.5) { if (!inF(a, b) || Math.hypot(a - dr[0], b - dr[1]) < 7) continue; holes.push(W(a + (hash(a, b) - 0.5) * 0.5, b + (hash(b, a) - 0.5) * 0.5)); } addHoles(holes); };      // malla tresbolillo 8 × 9,2 m (las coordenadas a, b van a escala 1,5)
-    cancha(-40, 30, -100, -40, [0, -70]); { const q = W(0, -70); placeDrill(q.x, q.z, Math.atan2(P.ux, P.uz) + 0.4, false); }
-    cancha(-95, -45, 40, 95, [-70, 70]); { const q = W(-70, 70); placeDrill(q.x, q.z, Math.atan2(-P.tx, -P.tz) - 0.3, false); }
-    rockScatter((a, b) => { const an = a * 6.28, r = 0.8 + b * 0.3, ca = -140 + Math.cos(an) * 10 * r, cb = Math.sin(an) * 24 * r; return W(ca, cb); }, 50, 41);
-    rockScatter((a, b) => { const an = a * 6.28, r = 0.8 + b * 0.3, ca = 40 + Math.sin(an) * 22 * r, cb = 78 + Math.cos(an) * 9 * r; return W(ca, cb); }, 40, 43);
-  }
-  for (const Q of F7EQ.palas) { mkLoadZone(Q.x, Q.z, Q.fx, Q.fz, Q.num, Q.off);      // fase 7: palas de cables en sus pilas
-    rockScatter((a, b) => { const an = a * 6.28, r = 0.8 + b * 0.3, ca = 34 + Math.cos(an) * 17 * r, cb = Math.sin(an) * 40 * r; return { x: Q.x + Q.fx * ca - Q.fz * cb, z: Q.z + Q.fz * ca + Q.fx * cb }; }, 50, 61 + Q.num.charCodeAt(0)); }
-  if (!P3_MOVED) {
-  { const q = _pl(SHOV_AL, SPOT_LA + 2); addDozer(q.x - q.tx * 50, q.z - q.tz * 50, q.nx, q.nz, 5);
-    const D = DOZ[DOZ.length - 1], T = _pl(SHOV_AL - 12, SHOV_LA + 5.5), rm = [lam(0x6e5c49), lam(0x8a7660)], ld = new THREE.Group();
-    for (let i = 0; i < 9; i++) { const r = new THREE.Mesh(rockGeo, rm[i % 2]), sc = 0.6 + hash(i, 31) * 0.6; r.scale.set(sc, sc * 0.7, sc); r.position.set((hash(i, 32) - 0.5) * 4.6, 0.6 + hash(i, 33) * 0.9, 7.0 + hash(i, 34) * 1.4); ld.add(r); }
-    ld.visible = false; D.g.add(ld); D.p3 = { T: { x: T.x, z: T.z }, e: 0, load: ld };
-    rockScatter((a, b) => { const an = a * 6.28, r = Math.sqrt(b) * 0.9, ca = 38 + Math.cos(an) * 13 * r, cb = -56 + Math.sin(an) * 22 * r; return { x: q.x + q.nx * (ca - SPOT_LA - 2) + q.tx * cb, z: q.z + q.nz * (ca - SPOT_LA - 2) + q.tz * cb }; }, 45, 57);
-    rockScatter((a, b) => { const an = a * 6.28, r = Math.sqrt(b) * 0.9, ca = 47 + Math.cos(an) * 14 * r, cb = -86 + Math.sin(an) * 17 * r; return { x: q.x + q.nx * (ca - SPOT_LA - 2) + q.tx * cb, z: q.z + q.nz * (ca - SPOT_LA - 2) + q.tz * cb }; }, 40, 63); }      // fase 7: wheel dozer de la pala 3, más allá del camión de la izquierda (fuera del giro de la pala y al lado contrario del cable)
-  }
-  {      // apoyo al carguío: un wheel dozer por pala (en un paño plano al costado, fuera del giro y lejos de los camiones) que ordena el piso, y bulldozers de orugas sobre las pilas tronadas de la fase 7 empujando material hacia la pala
-    const WD = F7EQ.palas.map(p => ({ x: p.x, z: p.z, fx: p.fx, fz: p.fz, h: f7h(p.x, p.z) })).concat([{ x: F7EQ.pc.x, z: F7EQ.pc.z, fx: F7EQ.pc.fx, fz: F7EQ.pc.fz, h: f7h(F7EQ.pc.x, F7EQ.pc.z) }, Object.assign({ h: FLOOR }, PIT.p5), Object.assign({ h: FLOOR }, PIT.p1)]);
-    WD.forEach((p, k) => { const tmp = []; for (const o of OBST.filter(o => o.r === 8 && Math.hypot(o.x - p.x, o.z - p.z) < 40)) for (let t = 12; t <= 110; t += 12) tmp.push({ x: o.x - p.fx * t, z: o.z - p.fz * t, r: 12 }); OBST.push(...tmp);      // las salidas de los camiones quedan libres
-      const q = workSite(p, p.fx, p.fz, p.h, [1, -1]); OBST.splice(OBST.length - tmp.length, tmp.length); if (q) addDozer(q.x, q.z, p.fx, p.fz, 2 + k * 1.7); });
-    F7EQ.palas.forEach((p, k) => { const d = 46, la = 8 * (k % 2 ? 1 : -1); addDozer(p.x + p.fx * d - p.fz * la, p.z + p.fz * d + p.fx * la, -p.fx, -p.fz, 5 + k * 2.3, true); });      // sobre la pila, detras de la bahia, mirando a la pala
-  }
-  {      // huellas de los camiones desde cada pala hasta la salida: en la fase 7 al inicio del camino rojo (que lleva al portón), en el fondo a donde entra la azul
-    const T7 = { x: SEC[0][SEC[0].length - 1][0], z: SEC[0][SEC[0].length - 1][1] }, TF = { x: SEC[6][SEC[6].length - 1][0], z: SEC[6][SEC[6].length - 1][1] };
-    const palas = F7EQ.palas.map(p => ({ x: p.x, z: p.z, fx: p.fx, fz: p.fz, T: T7 })).concat([{ x: PIT.p5.x, z: PIT.p5.z, fx: PIT.p5.fx, fz: PIT.p5.fz, T: TF }, { x: PIT.x + PIT.ux * -112 * 1.5, z: PIT.z + PIT.uz * -112 * 1.5, fx: -PIT.ux, fz: -PIT.uz, T: TF }]);
-    for (const p of palas) for (const o of OBST.filter(o => o.r === 8 && Math.hypot(o.x - p.x, o.z - p.z) < 40)) drawTracks(floorPath({ x: o.x - p.fx * 32, z: o.z - p.fz * 32 }, p.T));      // desde 32 m adelante de cada camión (ya fuera de la pala)
-  }
-}
-function mkPlatform() {
-  if (!PLAT) return;
-  buildDrills(); buildOps();
-  if (!P3_MOVED) { const sv = buildShovel(), p = _pl(SHOV_AL, SHOV_LA);
-    sv.g.position.set(p.x, H(p.x, p.z), p.z); sv.g.rotation.y = Math.atan2(p.nx, p.nz); scene.add(sv.g); OBST.push({ x: p.x, z: p.z, r: 10 });
-    dumpTune(sv, H);
-    {      // cada camión se cuadra con el centro de su tolva justo bajo el balde (donde descarga la pala al girar a ese lado)
-      const las = [], fits = [];
-      for (const i of [0, 1]) {
-        sv.swing = i ? 1 : -1; shovelPose(sv, 4.0); sv.g.updateMatrixWorld(true); const bp = sv.bucket.getWorldPosition(new THREE.Vector3()), tx = bp.x - p.nx * TOLVA_C, tz = bp.z - p.nz * TOLVA_C;
-        let best = null; for (let al = SHOV_AL - 45; al <= SHOV_AL + 45; al += 0.5) for (let la = WR; la <= WR + 30; la += 0.5) { const q = _pl(al, la), d = (q.x - tx) ** 2 + (q.z - tz) ** 2; if (!best || d < best.d) best = { al, la, d }; }
-        fits.push({ al: best.al, la: best.la, sw: sv.swing });
-      }
-      fits.sort((a, b) => a.al - b.al);      // el puesto 0 es el del lado del wheel dozer (al menor)
-      fits.forEach((q, i) => { SPOT_AL[i] = q.al; });
-      SPOT_LA = (fits[0].la + fits[1].la) / 2; sv.swingFor = fits.map(q => q.sw); sv.swing = 1; shovelPose(sv, 0);
-    }
-    for (const al of SPOT_AL) { const q = _pl(al, SPOT_LA); OBST.push({ x: q.x, z: q.z, r: 8 }); }
-    plat.shov.push(Object.assign(sv, { al: SHOV_AL, off: 0, prev: 0, swing: 1, last: 0 })); }
-  if (!P3_MOVED) { const rm = [lam(0x6e5c49), lam(0x8a7660), lam(0x574a3b)];      // roca tronada al pie del frente, delante de la pala
-    for (let i = 0; i < 110; i++) { const al = SHOV_AL - 30 + hash(i, 7) * 60, la = WR + PLAT.D + 1.5 + hash(i, 8) * 9, p = _pl(al, la), sc = 0.4 + hash(i, 9) * 1.0;
-      if (Math.abs(al - SHOV_AL) < 4 && la < WR + PLAT.D + 6) continue;      // donde entra el balde queda el corte fresco
-      const r = new THREE.Mesh(rockGeo, rm[i % 3]); r.scale.set(sc, sc * 0.7, sc); r.position.set(p.x, H(p.x, p.z) + sc * 0.2, p.z); r.rotation.set(hash(i, 4) * 3, hash(i, 5) * 3, hash(i, 6) * 3); scene.add(r); } }
-  buildPowerLine(); buildCable2(); drillAbove3();
-}
-// Cables de las palas (como en la mina): van tendidos por el suelo desde una subestación en el borde del rajo, por las caras y bermas de los bancos, donde no anda nadie.
-// Solo donde un vehículo tiene que pasar (un camino o la entrada a la Rampa Sur) el cable sube a un par de postes pasacables de 18 m y cruza por arriba.
-const CTOP = 18.2;
-function cablePost(x, z, ax, az) {      // poste pasacables rojo y blanco de 18 m (si ya hay uno en ese punto, se comparte)
-  if (OBST.some(o => o.r === 1.6 && Math.hypot(o.x - x, o.z - z) < 3)) return;
-  const red = lam(0xe0401a), wh = lam(0xf4f4f4), g = new THREE.Group();
-  for (let y = 0; y < 18; y += 1.5) box(g, 0.55, 1.5, 0.55, (Math.floor(y / 1.5) % 2) ? wh : red, 0, y + 0.75, 0);
-  box(g, 3.0, 0.35, 0.35, wh, 0, 18, 0); box(g, 1.6, 0.6, 1.6, lam(0x1d1f22), 0, 0.25, 0);
-  g.position.set(x, H(x, z), z); g.rotation.y = Math.atan2(ax, az) + Math.PI / 2; scene.add(g); OBST.push({ x, z, r: 1.6 });
-}
-function cableSpan(out, a, b, n) { const ya = H(a.x, a.z) + CTOP, yb = H(b.x, b.z) + CTOP; for (let k = 1; k < n; k++) { const t = k / n; out.push(new THREE.Vector3(a.x + (b.x - a.x) * t, ya + (yb - ya) * t - 5.6 * t * (1 - t), a.z + (b.z - a.z) * t)); } out.push(new THREE.Vector3(b.x, yb, b.z)); }
-function buildSem6() {      // SEM 6: dos contenedores unidos (sala eléctrica) + subestación + letrero, en su patio junto al verde
-  const g = new THREE.Group(), wh = lam(0xe6e2d6), bl = lam(0x2f4f8f), dk = lam(0x2b2e33), gr = lam(0x8d9196);
-  for (const dz of [-1.35, 1.35]) { box(g, 12.2, 2.9, 2.6, wh, 0, 1.45 + 0.3, dz); box(g, 12.3, 0.5, 2.7, bl, 0, 0.55, dz); box(g, 12.3, 0.3, 2.7, bl, 0, 3.05, dz); }
-  box(g, 12.4, 0.3, 5.6, dk, 0, 0.15, 0);      // base
-  box(g, 0.9, 2.0, 0.08, dk, -4.5, 1.3, 2.66); box(g, 0.9, 2.0, 0.08, dk, 4.5, 1.3, -2.66);      // puertas
-  for (const sx of [-3, 0, 3]) box(g, 1.2, 0.8, 0.6, gr, sx, 3.5, 0);      // equipos de clima en el techo
-  cyl(g, 0.08, 0.08, 9, gr, 7.5, 4.5, 2.2); box(g, 1.6, 1.0, 0.1, lam(0xd8d8d8), 7.5, 8.2, 2.2);      // mástil con antena
-  g.position.set(SEM6.x, H(SEM6.x, SEM6.z), SEM6.z); g.rotation.y = -SEM6.rot; scene.add(g);
-  OBST.push({ x: SEM6.x, z: SEM6.z, r: 8 });
-  const sx = SEM6.x + Math.cos(SEM6.rot) * 2 - Math.sin(SEM6.rot) * 14, sz = SEM6.z + Math.sin(SEM6.rot) * 2 + Math.cos(SEM6.rot) * 14; substation({ x: sx, z: sz });
-  const s = new THREE.Group(), post = lam(0x5a5a5a); cyl(s, 0.08, 0.08, 3.2, post, -1.2, 1.6, 0); cyl(s, 0.08, 0.08, 3.2, post, 1.2, 1.6, 0);
-  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 96; const c = cv.getContext('2d'); c.fillStyle = '#f4f1e8'; c.fillRect(0, 0, 256, 96); c.fillStyle = '#1e3a73'; c.font = 'bold 54px sans-serif'; c.textAlign = 'center'; c.fillText('SEM 6', 128, 66);
-  const tx = new THREE.CanvasTexture(cv); const pl = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.2, 0.08), [lam(0xdddddd), lam(0xdddddd), lam(0xdddddd), lam(0xdddddd), new THREE.MeshLambertMaterial({ map: tx }), lam(0xdddddd)]); pl.position.set(0, 2.7, 0); s.add(pl);
-  const lx = SEM6.x + Math.sin(SEM6.rot) * 20, lz = SEM6.z - Math.cos(SEM6.rot) * 20; s.position.set(lx, H(lx, lz), lz); s.rotation.y = -SEM6.rot; scene.add(s);
-}
-function substation(p) {      // subestación móvil en la superficie, de donde sale el cable
-  const g = new THREE.Group(), gr = lam(0x8d9196), dk = lam(0x2b2e33), ye = lam(0xe8b80c);
-  box(g, 6, 0.5, 3.6, dk, 0, 0.25, 0); box(g, 5.4, 2.8, 3.0, gr, 0, 1.9, 0); box(g, 5.6, 0.25, 3.2, gr, 0, 3.4, 0); box(g, 5.42, 0.35, 3.02, ye, 0, 1.0, 0);
-  for (const sx of [-1.6, 0, 1.6]) cyl(g, 0.18, 0.18, 1.0, lam(0xdedede), sx, 4.0, 0);
-  g.position.set(p.x, H(p.x, p.z), p.z); g.rotation.y = hash(p.x, p.z) * 6.28; scene.add(g); OBST.push({ x: p.x, z: p.z, r: 4 });
-}
-const gdAt = (x, z) => { const fx = Math.round((x - GX0) / CELL), fz = Math.round((z - GZ0) / CELL); return (fx < 0 || fz < 0 || fx >= GNX || fz >= GNZ) ? 99 : GD[fz * GNX + fx]; };
-const onRoadC = (x, z) => { const g = gdAt(x, z); return g >= 0 && g <= WR + 1; };
-function cableRoute(S, T, avoid) {      // recorrido más barato por la malla: caras y bermas de los bancos baratas; pisos donde se circula, pilas y caminos caros (un camino se cruza solo si hace falta)
-  const N = GNX * GNZ, ci = (x, z) => Math.max(0, Math.min(GNZ - 1, Math.round((z - GZ0) / CELL))) * GNX + Math.max(0, Math.min(GNX - 1, Math.round((x - GX0) / CELL)));
-  const extra = new Float32Array(N), mark = (x, z, r, c) => { for (let dz = -r; dz <= r; dz += CELL) for (let dx = -r; dx <= r; dx += CELL) if (dx * dx + dz * dz <= r * r) { const i = ci(x + dx, z + dz); extra[i] = Math.max(extra[i], c); } };
-  OBST.forEach(o => { if (o.r >= 3) mark(o.x, o.z, o.r + 2, 1e4); });      // equipos: no pasa por debajo
-  (avoid || []).forEach(p => mark(p.x, p.z, p.r, 80));      // donde circulan camiones o la camioneta
-  const cost = i => { const d = GD[i]; let c = (d >= 0 && d <= WR + 1) ? 40 : d === -1 ? (PLAT7[i] ? 2 : 25) : d === -2 ? 30 : 1; return c + extra[i]; };
-  const s = ci(S.x, S.z), t = ci(T.x, T.z), tx = t % GNX, tz = Math.floor(t / GNX);
-  const g = new Float32Array(N).fill(Infinity), from = new Int32Array(N).fill(-1), done = new Uint8Array(N);
-  const hp = [], hv = [], push = (i, f) => { hp.push(i); hv.push(f); let k = hp.length - 1; while (k > 0) { const q = (k - 1) >> 1; if (hv[q] <= hv[k]) break; [hp[q], hp[k]] = [hp[k], hp[q]]; [hv[q], hv[k]] = [hv[k], hv[q]]; k = q; } };
-  const pop = () => { const top = hp[0], li = hp.pop(), lv = hv.pop(); if (hp.length) { hp[0] = li; hv[0] = lv; let k = 0; for (;;) { const l = 2 * k + 1, r = l + 1; let m = k; if (l < hp.length && hv[l] < hv[m]) m = l; if (r < hp.length && hv[r] < hv[m]) m = r; if (m === k) break; [hp[m], hp[k]] = [hp[k], hp[m]]; [hv[m], hv[k]] = [hv[k], hv[m]]; k = m; } } return top; };
-  g[s] = 0; push(s, 0);
-  while (hp.length) {
-    const i = pop(); if (done[i]) continue; done[i] = 1; if (i === t) break;
-    const ix = i % GNX, iz = Math.floor(i / GNX), ci0 = cost(i);
-    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dz) continue; const jx = ix + dx, jz = iz + dz; if (jx < 0 || jz < 0 || jx >= GNX || jz >= GNZ) continue;
-      const j = jz * GNX + jx; if (done[j]) continue; const ng = g[i] + (ci0 + cost(j)) * 0.5 * (dx && dz ? 1.414 : 1);
-      if (ng < g[j]) { g[j] = ng; from[j] = i; push(j, ng + Math.hypot(jx - tx, jz - tz)); } }
-  }
-  const P = []; for (let i = t; i >= 0; i = from[i]) { P.push({ x: GX0 + (i % GNX) * CELL, z: GZ0 + Math.floor(i / GNX) * CELL }); if (i === s) break; }
-  P.reverse(); P[0] = { x: S.x, z: S.z }; P[P.length - 1] = { x: T.x, z: T.z };
-  for (let it = 0; it < 2; it++) for (let k = 1; k < P.length - 1; k++) { const a = P[k - 1], b = P[k + 1], q = { x: (a.x + b.x + P[k].x * 2) / 4, z: (a.z + b.z + P[k].z * 2) / 4 }; if (onRoadC(q.x, q.z) === onRoadC(P[k].x, P[k].z)) P[k] = q; }      // suaviza sin mover los cruces
-  return P;
-}
-function layCable(P, out, info) {      // tiende el cable sobre P: por el suelo (no se pisa: obstáculo) y, donde cruza un camino, por arriba entre dos postes
-  let i = 0, n = 0;
-  while (i < P.length) {
-    const p = P[i];
-    if (!onRoadC(p.x, p.z)) { out.push(new THREE.Vector3(p.x, H(p.x, p.z) + 0.35, p.z)); if (n++ % 2 === 0) OBST.push({ x: p.x, z: p.z, r: 1.2 }); info.ground.push(p); i++; continue; }
-    let j = i; while (j < P.length && onRoadC(P[j].x, P[j].z)) j++;
-    const a = j - 1 > i ? P[i] : P[Math.max(0, i - 1)], b = j - 1 > i ? P[j - 1] : P[Math.min(P.length - 1, j)];      // postes en el camino, justo en cada orilla
-    cablePost(a.x, a.z, b.x - a.x, b.z - a.z); cablePost(b.x, b.z, b.x - a.x, b.z - a.z); info.posts.push(a, b);
-    out.push(new THREE.Vector3(a.x, H(a.x, a.z) + 0.6, a.z), new THREE.Vector3(a.x, H(a.x, a.z) + CTOP, a.z)); cableSpan(out, a, b, 12); out.push(new THREE.Vector3(b.x, H(b.x, b.z) + 0.6, b.z));
-    i = j;
-  }
-}
-function groundCable(out, way, S, info) {      // último tramo por el piso junto a la pala (obstáculo: no se pisa) y entrada a la pala
-  const pts = [];
-  for (let s = 0; s < way.length - 1; s++) { const a = way[s], b = way[s + 1], m = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 1.5)); for (let i = 1; i <= m; i++) pts.push({ x: a.x + (b.x - a.x) * i / m, z: a.z + (b.z - a.z) * i / m }); }
-  pts.forEach((p, k) => { out.push(new THREE.Vector3(p.x, H(p.x, p.z) + 0.25, p.z)); if (k % 2 === 0 && k < pts.length - 3) OBST.push({ x: p.x, z: p.z, r: 1.2 }); info.ground.push(p); });
-  const e = pts[pts.length - 1]; out.push(new THREE.Vector3(S.x + (e.x - S.x) * 0.6, H(S.x, S.z) + 1.4, S.z + (e.z - S.z) * 0.6));
-  const curve = new THREE.CatmullRomCurve3(out); curve.curveType = 'centripetal';
-  scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, Math.min(6000, out.length * 3), 0.16, 6, false), lam(0x1a1a1a)));
-}
-const rimPoint = S => {      // punto en la superficie, afuera del borde del rajo, en la dirección de S desde el centro (para la subestación)
-  let dx = S.x - PITC.x, dz = S.z - PITC.z; const n = Math.hypot(dx, dz) || 1; dx /= n; dz /= n; let r = n; while (inPoly(PITC.x + dx * r, PITC.z + dz * r, RIMPOLY) && r < 2000) r += 4;
-  for (let k = 0; k < 20; k++) { const p = { x: PITC.x + dx * (r + 14 + k * 4), z: PITC.z + dz * (r + 14 + k * 4) }; if (!onRoadC(p.x, p.z) && !OBST.some(o => Math.hypot(o.x - p.x, o.z - p.z) < o.r + 6)) return p; }
-  return { x: PITC.x + dx * (r + 14), z: PITC.z + dz * (r + 14) };
-};
-function buildPowerLine() {      // cable de la pala 3: de la subestación, por el suelo, hasta el poste del portón; cruza por arriba la entrada a la Rampa Sur y sigue por el pie del frente hasta un costado de la pala
-  const s0 = _pl(SHOV_AL, SHOV_LA), info = { ground: [], posts: [] };
-  // portón: dos postes pasacables a 42 m (pasan dos CAEX a la vez, uno entrando y otro saliendo); el cable cruza por arriba a 18 m
-  const gc = 48, gw = 21, G1 = _pl(gc + gw, 30), G2 = _pl(gc - gw, 30);
-  GATE = { s0: PLAT.se + gc - gw, s1: PLAT.se + gc + gw, d: WR + 15.5, p: [G1, G2] };
-  const avoid = [];      // por donde circulan: la entrada del portón, los camiones de la pala 3 y el piso de la fase 7 entre la partida y el portón
-  for (let al = gc - gw + 3; al <= gc + gw - 3; al += 4) for (let la = 0; la <= 34; la += 6) { const q = _pl(al, la); avoid.push({ x: q.x, z: q.z, r: 6 }); }
-  for (const sp of SPOT_AL) for (let al = sp - 60; al <= sp + 70; al += 5) { const q = _pl(al, sp - al > 0 ? ARR_LA + (SPOT_LA - ARR_LA) * sm01(1 - (sp - al) / 30) : SPOT_LA - (al - sp) * 0.35); avoid.push({ x: q.x, z: q.z, r: 9 }); }
-  const A = rimPoint(G1); substation(A);
-  const out = [new THREE.Vector3(A.x, H(A.x, A.z) + 1.2, A.z)];
-  layCable(cableRoute(A, _pl(gc + gw + 3, 26), avoid), out, info);
-  out.push(new THREE.Vector3(G1.x, H(G1.x, G1.z) + 0.6, G1.z), new THREE.Vector3(G1.x, H(G1.x, G1.z) + CTOP, G1.z));
-  cablePost(G1.x, G1.z, G2.x - G1.x, G2.z - G1.z); cablePost(G2.x, G2.z, G2.x - G1.x, G2.z - G1.z); info.posts.push(G1, G2);
-  cableSpan(out, G1, G2, 14);
-  out.push(new THREE.Vector3(G2.x, H(G2.x, G2.z) + 0.6, G2.z));      // baja por el poste del lado de la pala
-  const toe = WR + PLAT.D - 4;      // entre la cola de los camiones y la pila tronada
-  if (P3_MOVED) { const Q = F7EQ.pc, back = { x: Q.x - Q.fx * 20, z: Q.z - Q.fz * 20 }, G3 = _pl(gc - gw - 12, 32);      // baja del poste y se aleja del portón antes de seguir a la pala
-    const seg = []; for (let t = 0.1; t < 1; t += 0.1) seg.push({ x: G2.x + (G3.x - G2.x) * t, z: G2.z + (G3.z - G2.z) * t });
-    const r5 = D52.cab.p5, i1 = r5.findIndex(p => p[2] === 1 && p[1] > 420); let i2 = i1; while (r5[i2 + 1][2] === 1) i2++;      // cruce de la celeste compartido con el cable de la pala 5: mismo par de postes
-    const S1 = { x: r5[i2 + 1][0], z: r5[i2 + 1][1] }, S2 = { x: r5[i1 - 1][0], z: r5[i1 - 1][1] };
-    layCable(seg.concat(cableRoute(G3, S1, avoid)), out, info);
-    cablePost(S1.x, S1.z, S2.x - S1.x, S2.z - S1.z); cablePost(S2.x, S2.z, S2.x - S1.x, S2.z - S1.z); info.posts.push(S1, S2);
-    out.push(new THREE.Vector3(S1.x, H(S1.x, S1.z) + 0.6, S1.z), new THREE.Vector3(S1.x, H(S1.x, S1.z) + CTOP, S1.z)); cableSpan(out, S1, S2, 14); out.push(new THREE.Vector3(S2.x, H(S2.x, S2.z) + 0.6, S2.z));
-    layCable(cableRoute(S2, back, avoid), out, info); groundCable(out, [back, { x: Q.x - Q.fx * 12, z: Q.z - Q.fz * 12 }, { x: Q.x - Q.fx * 7 + Q.fz * 2, z: Q.z - Q.fz * 7 - Q.fx * 2 }], { x: Q.x, z: Q.z }, info); }
-  else groundCable(out, [G2, _pl(gc - gw - 5, toe), _pl(SHOV_AL + 11, toe), _pl(SHOV_AL + 7, SHOV_LA + 6), _pl(SHOV_AL + 4.5, SHOV_LA + 3.5)], s0, info);
-  CABLE = Object.assign(info, { src: A });
-}
-function drawnCable(W, Q, local) {      // local: la subestación móvil va en el primer punto dibujado (dentro del rajo), no en el borde      // cable dibujado: de la subestación en el borde, por el suelo; en los pasacables (y donde cruza un camino) sube a dos postes y pasa por arriba
-  const info = { ground: [], posts: [] }, P = W.map(p => ({ x: p[0], z: p[1], g: p[2] })).reverse();
-  const lanes = OBST.filter(o => o.r === 8 && Math.hypot(o.x - Q.x, o.z - Q.z) < 40), inLane = p => lanes.some(o => { const t = -(p.x - o.x) * Q.fx - (p.z - o.z) * Q.fz, w = Math.abs(-(p.x - o.x) * Q.fz + (p.z - o.z) * Q.fx); return t > -6 && t < 120 && w < 10; });      // salida de los camiones: desde cada puesto de carga, hacia adelante (se alejan de la pila), 20 m de ancho
-  { const e = { x: Q.x - Q.fx * 9, z: Q.z - Q.fz * 9 }, a = P[P.length - 1], L = Math.hypot(e.x - a.x, e.z - a.z), m = Math.ceil(L / 2); for (let i = 1; i < m - 1; i++) P.push({ x: a.x + (e.x - a.x) * i / m, z: a.z + (e.z - a.z) * i / m, g: 0 }); }      // el último tramo hasta la pala también puede cruzar una salida
-  P.forEach(p => { if (onRoadC(p.x, p.z) || inLane(p)) p.g = 1; });
-  for (let k = 1; k < P.length - 1; k++) if (!P[k].g && P[k - 1].g && (P[k + 1].g || (P[k + 2] && P[k + 2].g))) P[k].g = 1;      // dos tramos elevados casi seguidos se juntan en uno      // donde cruza un camino o una salida de camiones, el cable va por arriba entre dos postes
-  const A = local ? { x: P[0].x, z: P[0].z } : rimPoint(P[0]); substation(A);
-  const out = [new THREE.Vector3(A.x, H(A.x, A.z) + 1.2, A.z)]; if (!local) layCable(cableRoute(A, P[0], []), out, info);
-  const last = P.length - 1; let k = 0;
-  while (k < last) {
-    if (P[k + 1].g) { let j = k + 1; while (j < last && P[j].g) j++; const a = P[k], b = P[j];
-      cablePost(a.x, a.z, b.x - a.x, b.z - a.z); cablePost(b.x, b.z, b.x - a.x, b.z - a.z); info.posts.push(a, b);
-      out.push(new THREE.Vector3(a.x, H(a.x, a.z) + 0.6, a.z), new THREE.Vector3(a.x, H(a.x, a.z) + CTOP, a.z)); cableSpan(out, a, b, 14); out.push(new THREE.Vector3(b.x, H(b.x, b.z) + 0.6, b.z)); k = j; continue; }
-    const a = P[k], b = P[k + 1], m = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 2));
-    for (let i = 1; i <= m; i++) { const p = { x: a.x + (b.x - a.x) * i / m, z: a.z + (b.z - a.z) * i / m }; out.push(new THREE.Vector3(p.x, H(p.x, p.z) + 0.3, p.z)); if (i % 2 === 0) OBST.push({ x: p.x, z: p.z, r: 1.2 }); info.ground.push(p); }
-    k++;
-  }
-  groundCable(out, [P[last], { x: Q.x - Q.fx * 9, z: Q.z - Q.fz * 9 }], { x: Q.x, z: Q.z }, info);
-  return Object.assign(info, { src: A });
-}
-function buildCable2() {      // palas 2, 3 y 6 de la fase 7 y pala 5 del fondo: cables como en el dibujo
-  for (const [k, Q] of [['p2', F7EQ.palas[0]], ['p3', F7EQ.palas[1]], ['p6', F7EQ.palas[2]], ['p5', PIT.p5]]) { if (!Q) continue; const info = drawnCable(D52.cab[k], Q); if (!CABLE2) CABLE2 = info; }
-}
-let DRILL3 = null;
-function drillAbove3() { return;      // (la cancha de la 402 junto a la Rampa Sur ya no existe: la fase 7 tiene sus canchas propias)
-}
-function drillAbove3_old() {      // pala 3: cancha de perforación en el piso detrás de su frente (el material que viene); la perforadora trabaja en el extremo y la malla de pozos queda a su izquierda
-  const s3 = _pl(SHOV_AL, 0), P = (ao, la) => ({ x: s3.x + s3.tx * ao + s3.nx * la, z: s3.z + s3.tz * ao + s3.nz * la });
-  const ok = (p, m) => { for (let j = 0; j < 8; j++) { const x = p.x + Math.cos(j * 0.785) * m, z = p.z + Math.sin(j * 0.785) * m; if (Math.abs(H(x, z) - H7) > 0.6 || gdAt(x, z) === -2 || onRoadC(x, z)) return false; } return true; };
-  let D = null; for (const [ao, la] of [[-8, 74], [-8, 80], [-14, 74], [-2, 78], [-8, 68], [-14, 84]]) { const p = P(ao, la); if (ok(p, 5) && !OBST.some(o => Math.hypot(o.x - p.x, o.z - p.z) < o.r + 4)) { D = Object.assign(p, { ao, la }); break; } }
-  if (!D) D = Object.assign(P(-8, 74), { ao: -8, la: 74 });
-  placeDrill(D.x, D.z, Math.atan2(s3.tx, s3.tz), false);
-  { let q = null; for (const ao of [D.ao - 32, D.ao - 41, D.ao - 50, D.ao - 23]) { const p = P(ao, 63); if (ok(p, 4) && !OBST.some(o => Math.hypot(o.x - p.x, o.z - p.z) < o.r + 3)) { q = p; break; } }      // 408: dentro de la cancha, en la primera fila (burden de 9 m desde el banco)
-    if (q) { OBST.push({ x: q.x, z: q.z, r: 6 }); const cd = buildCrawlerDrill(nextDrillNum()); cd.position.set(q.x, H(q.x, q.z), q.z); cd.rotation.y = Math.atan2(-s3.nx, -s3.nz); scene.add(cd); DRILL3B = q; } }
-  const holes = [];
-  for (let la = 63, row = 0; la <= 90; la += 9, row++) for (let ao = -105 + (row % 2) * 4.5; ao <= D.ao - 7; ao += 9) {
-    const p = P(ao + (hash(ao, la) - 0.5) * 0.8, la + (hash(la, ao) - 0.5) * 0.8);
-    if (Math.hypot(p.x - D.x, p.z - D.z) < 8 || !ok(p, 1.5) || OBST.some(o => Math.hypot(o.x - p.x, o.z - p.z) < Math.max(3, o.r + 1))) continue;
-    holes.push(p);
-  }
-  if (holes.length) addHoles(holes);
-  // conos naranjos cerrando la cancha por el lado de la perforadora: una línea que cruza el piso desde la pila hasta la pared
-  const cm = lam(0xff6a00), cw = lam(0xf2f2f2), cd = lam(0x1b1b18), cones = [];
-  for (let la = 56; la <= 104; la += 6) {
-    let p = null; for (const ao of [D.ao + 11, D.ao + 13, D.ao + 9, D.ao + 15]) { const q = P(ao, la); if (ok(q, 1) && !OBST.some(o => Math.hypot(o.x - q.x, o.z - q.z) < o.r)) { p = q; break; } }
-    if (!p) continue; const c = new THREE.Group();
-    cyl(c, 0.34, 0.34, 0.08, cd, 0, 0.04, 0); cyl(c, 0.07, 0.3, 1.0, cm, 0, 0.58, 0); cyl(c, 0.2, 0.2, 0.14, cw, 0, 0.5, 0); cyl(c, 0.14, 0.14, 0.12, cw, 0, 0.78, 0);
-    c.scale.setScalar(1.6); c.position.set(p.x, H(p.x, p.z) + 0.02, p.z); scene.add(c); cones.push(p);
-  }
-  DRILL3 = { x: D.x, z: D.z, holes: holes.length, cones: cones.length };
-}
-function resetPlatform() {
-  if (!PLAT) return;
-  for (const ld of plat.loaders) scene.remove(ld.mesh);
-  plat.loaders.length = 0; plat.nid = 220; plat.merging = false; plat.cool = [0, 0];
-  if (!TEST && !P3_MOVED) SPOT_AL.forEach((al, i) => { const ld = mkLoaderTruck(al, i); ld.la = SPOT_LA; ld.tau = 1; ld.state = i ? 'load' : 'ready'; ld.fill = 1; ld.pile.scale.y = 0.05 + 0.95 * ld.fill; plat.loaders.push(ld); });
-}
-function startMerge(ld, idx) {
-  const lane = -LANE * PLAT.side, a0 = ld.al;
-  const bz = [_pl(a0, ld.la), _pl(a0, ARR_LA + 2), _pl(a0 + 40, lane), _pl(a0 + 84, lane)];      // sale de frente (estaba de cola al banco)
-  let len = 0, prev = bz[0]; for (let i = 1; i <= 30; i++) { const p = bezAt(bz, i / 30); len += Math.hypot(p.x - prev.x, p.z - prev.z); prev = p; }
-  trucks.push({ id: ld.num, s: PLAT.se + a0, u: -LANE, v: 0, v0: 2.2 + Math.random() * 1.4, mesh: ld.mesh, beacon: ld.beacon, auth: false, passed: false,
-    prevD: PLAT.se + a0 - P.s, off: 0, merge: { bz, len, tau: 0, sp: 3.8, x: bz[0].x, z: bz[0].z, dx: -bz[0].nx, dz: -bz[0].nz } });
-  plat.merging = true; plat.loaders.splice(idx, 1); plat.cool[ld.spot] = 5 + Math.random() * 6;
-}
-function updatePlatform(dt) {
-  if (!PLAT) return;
-  plat.shov.forEach((sv, i) => {
-    const ph = (tAnim + sv.off) % SHOV_T, was = sv.prev; sv.prev = ph;
-    if (was > ph) {      // nuevo ciclo: gira hacia el camión que está cargando (alterna si hay dos)
-      const ls = [0, 1].filter(k => plat.loaders.some(l => l.spot === k && l.state === 'load'));
-      const k = ls.length === 2 ? 1 - sv.last : ls.length ? ls[0] : 1 - sv.last; sv.last = k; sv.swing = sv.swingFor ? sv.swingFor[k] : (k === 1 ? 1 : -1);
-    }
-    if (was < 4.1 && ph >= 4.1) { const ld = plat.loaders.find(l => l.spot === sv.last && l.state === 'load'); if (ld) ld.fill = Math.min(1, ld.fill + 0.2); }
-  });
-  const sm = PLAT.se + 70;
-  for (let i = plat.loaders.length - 1; i >= 0; i--) {
-    const ld = plat.loaders[i];
-    if (ld.state === 'arrive') { const turn = SPOT_AL[ld.spot] + 18; ld.al = Math.min(turn, ld.al + 4.2 * dt); ld.la = ARR_LA; if (ld.al >= turn) { ld.state = 'back'; ld.tau = 0; } }      // pasa de largo por la orilla
-    else if (ld.state === 'back') { ld.tau = Math.min(1, ld.tau + dt / 9); if (ld.tau >= 1) { ld.al = SPOT_AL[ld.spot]; ld.la = SPOT_LA; ld.state = 'load'; } }      // retrocede y se cuadra de cola al banco
-    else if (ld.state === 'load') { if (ld.fill >= 1) ld.state = 'ready'; }
-    else if (ld.state === 'ready') {
-      ld.wait += dt;
-      const okPlayer = P.s < sm - 300 || P.s > sm + 60, free = !plat.merging && !trucks.some(t => Math.abs(t.s - sm) < 50);
-      if (ld.wait > 3 && okPlayer && free) startMerge(ld, i);
-    }
-  }
-  if (!TEST && !P3_MOVED) for (let sp = 0; sp < SPOT_AL.length; sp++) if (!plat.loaders.some(l => l.spot === sp)) {      // en modo prueba no llegan camiones a la pala
-    plat.cool[sp] -= dt;
-    if (plat.cool[sp] <= 0) plat.loaders.push(mkLoaderTruck(SPOT_AL[sp] - 95, sp));
-  }
-  for (const t of trucks) if (t.merge) {
-    const m = t.merge; m.tau = Math.min(1, m.tau + m.sp * dt / m.len);
-    const p = bezAt(m.bz, m.tau), p2 = bezAt(m.bz, Math.min(1, m.tau + 0.02)), n = Math.hypot(p2.x - p.x, p2.z - p.z) || 1;
-    m.x = p.x; m.z = p.z; m.dx = (p2.x - p.x) / n; m.dz = (p2.z - p.z) / n;
-    const su = worldToSU(p.x, p.z, t.s); t.s = su.s; t.u = su.u;
-    if (m.tau >= 1) { t.merge = null; t.u = -LANE; plat.merging = false; }
-  }
-}
-function backAt(sp, t) {      // retroceso hasta el punto de carga: de la orilla (mirando hacia adelante) a quedar de cola al frente
-  const B = [[sp + 18, ARR_LA], [sp + 4, ARR_LA], [sp, SPOT_LA - 12], [sp, SPOT_LA]], f = t => { const u = 1 - t; return [0, 1].map(k => u * u * u * B[0][k] + 3 * u * u * t * B[1][k] + 3 * u * t * t * B[2][k] + t * t * t * B[3][k]); };
-  const t0 = Math.min(t, 0.99), a = f(t0), b = f(t0 + 0.01), p = f(t), pa = _pl(a[0], a[1]), pb = _pl(b[0], b[1]), q = _pl(p[0], p[1]), dx = pa.x - pb.x, dz = pa.z - pb.z, n = Math.hypot(dx, dz) || 1;
-  return { x: q.x, z: q.z, dx: dx / n, dz: dz / n };
-}
-function poseMerge(t) { const m = t.merge; setWorldPose(t.mesh, m.x, m.z, m.dx, m.dz); }
-function animPlatform(dt) {
-  if (!PLAT) return;
-  plat.shov.forEach(sv => shovelPose(sv, (tAnim + sv.off) % SHOV_T)); animOps(dt);
-  for (const ld of plat.loaders) {
-    if (ld.state === 'arrive') { const p = _pl(ld.al, ld.la); setWorldPose(ld.mesh, p.x, p.z, p.tx, p.tz); } else { const b = backAt(SPOT_AL[ld.spot], sm01(ld.tau == null ? 1 : ld.tau)); setWorldPose(ld.mesh, b.x, b.z, b.dx, b.dz); }
-    ld.pile.scale.y += ((0.05 + 0.95 * ld.fill) - ld.pile.scale.y) * Math.min(1, dt * 3);
-    blink(ld.beacon, false);
-  }
-}
-mkPlatform();
-buildSem6();
+/* ───────────── Operaciones mineras: en js/operaciones (carguio, malla, cables). Aquí solo se llena el mundo compartido y se llaman los pasos ───────────── */
+Object.assign(M, { scene, H, frame, OBST, GD, GX0, GZ0, GNX, GNZ, CELL, PLAT7, PLAT, PITC, F7EQ, RED52, PIT, f7h, PAD_UP });      // lo que las operaciones necesitan del mundo
+paso('operaciones: canchas de perforación, palas cargando, dozers y huellas', () => { buildDrills(); buildOps(); });
+paso('cables: subestaciones, postes pasacables y SEM 6', () => { buildPowerLine(); buildCable2(); buildSem6(); });
 
 /* ───────────── Final: domo mirador y estacionamiento de camiones ───────────── */
 const END_S = L + 205;      // aquí se estaciona la camioneta, frente a la puerta del domo
@@ -1542,7 +1085,7 @@ const FREE0 = (() => {      // partida en el piso de la fase 7, en el extremo m�
     let ok = true; for (let a = 0; a < 12 && ok; a++) { const qx = x + Math.cos(a * TAU / 12) * 14, qz = z + Math.sin(a * TAU / 12) * 14; if (Math.abs(H(qx, qz) - f7h(qx, qz)) > 0.4) ok = false; }
     if (!ok || OBST.some(o => Math.hypot(o.x - x, o.z - z) < o.r + 22)) continue;
     const d = Math.hypot(x - f0.x, z - f0.z); if (d > 390) continue;
-    const gm = GATE ? { x: (GATE.p[0].x + GATE.p[1].x) / 2, z: (GATE.p[0].z + GATE.p[1].z) / 2 } : f0; let clear = true;      // camino recto despejado hasta el portón
+    const gm = M.GATE ? { x: (M.GATE.p[0].x + M.GATE.p[1].x) / 2, z: (M.GATE.p[0].z + M.GATE.p[1].z) / 2 } : f0; let clear = true;      // camino recto despejado hasta el portón
     for (let t = 0; t <= 1 && clear; t += 0.03) { const qx = x + (gm.x - x) * t, qz = z + (gm.z - z) * t; if (Math.abs(H(qx, qz) - f7h(qx, qz)) > 6 && !onRoadC(qx, qz) || OBST.some(o => Math.hypot(o.x - qx, o.z - qz) < o.r + 5)) clear = false; }
     if (!clear) continue; if (!best || d > best.d) best = { x, z, d };
   }
@@ -1564,12 +1107,12 @@ function stepFree(dt) {      // tránsito libre por el piso de la fase 7 (sin pi
   F.a += steer * Math.max(0.7, Math.min(P.v / 9, 1.3)) * dt;      // también gira detenida, para salir de un talud
   const hx = Math.cos(F.a), hz = Math.sin(F.a), nx = F.x + hx * P.v * dt, nz = F.z + hz * P.v * dt;
   let gateMsg = false;
-  if (GATE && !F.gate && !TEST) {      // solo se llega a la Rampa Sur pasando entre los postes pasacables
+  if (M.GATE && !F.gate && !TEST) {      // solo se llega a la Rampa Sur pasando entre los postes pasacables
     const near = (x, z) => { let b = null; for (let s = START_S; s < START_S + 260; s += 2) { const f = frame(s), d = Math.hypot(f.x - x, f.z - z); if (!b || d < b.d) b = { s, d }; } return b; };
     const hiA = H(F.x, F.z) > f7h(F.x, F.z) + 3, hiN = H(nx, nz) > f7h(nx, nz) + 3;      // arriba de la rampa o en la cancha de perforación (sobre el piso de la bahía) no rige el portón
     if (!hiN) { const a = near(F.x, F.z), b = near(nx, nz);
-      if (a.d >= GATE.d && b.d < GATE.d) { if (b.s > GATE.s0 + 1.5 && b.s < GATE.s1 - 1.5) F.gate = true; else gateMsg = true; }
-      else if (hiA && b.d < GATE.d) gateMsg = true; }      // bajar de la cancha hacia el camino tampoco vale: al camino se entra por el portón
+      if (a.d >= M.GATE.d && b.d < M.GATE.d) { if (b.s > M.GATE.s0 + 1.5 && b.s < M.GATE.s1 - 1.5) F.gate = true; else gateMsg = true; }
+      else if (hiA && b.d < M.GATE.d) gateMsg = true; }      // bajar de la cancha hacia el camino tampoco vale: al camino se entra por el portón
   }
   if (gateMsg) { P.v = 0; setBanner('Entra a la Rampa Sur por entre los postes pasacables.', 'warn'); bannerT = 2; }
   else if (freeBlocked(nx, nz, hx, hz)) { if (P.v > 3) { beep(90, 0.18, 'sawtooth', 0.06); shake = Math.max(shake, 0.3); } P.v = 0; }
@@ -1578,21 +1121,20 @@ function stepFree(dt) {      // tránsito libre por el piso de la fase 7 (sin pi
   // ¿llegó a la Rampa Sur? (tramo junto a la fase 7)
   let bs = null; for (let s = START_S; s < START_S + 260; s += 2) { const f = frame(s), d = (f.x - F.x) ** 2 + (f.z - F.z) ** 2; if (!bs || d < bs.d) bs = { s, d, f }; }
   const f = bs.f, u = (F.x - f.x) * f.rx + (F.z - f.z) * f.rz;
-  if ((F.gate || !GATE) && Math.abs(u) < CRASH_U - 2.5 && Math.abs((F.x - f.x) * f.tx + (F.z - f.z) * f.tz) < 3) {
+  if ((F.gate || !M.GATE) && Math.abs(u) < CRASH_U - 2.5 && Math.abs((F.x - f.x) * f.tx + (F.z - f.z) * f.tz) < 3) {
     const along = hx * f.tx + hz * f.tz, side = hx * f.rx + hz * f.rz;
     Object.assign(P, { s: bs.s, u, v: P.v * Math.max(0.4, along), vu: P.v * side * 0.5 }); free = null; camSnap = false;
     setBanner('Tomaste la Rampa Sur. ¡Circula por la izquierda!', 'ok'); bannerT = 2.5;
   }
 }
 function resetGame() {
-  capNum = 100;      // los CAEX se numeran desde el 101
+  resetCaexIds();
   for (const t of trucks.concat(oncs)) scene.remove(t.mesh);
   for (const r of rocks) scene.remove(r.mesh);
   for (const c of rocasPista) scene.remove(c.mesh);
   rocasPista.length = 0;
   if (!TEST) for (let cs = START_S + 130 + Math.random() * 40; cs < L - 70; cs += 150 + Math.random() * 130) if (!PLAT || Math.abs(cs - PLAT.se) > PLAT.HL + 60) rocasPista.push(mkRoca(cs));
   resetFallRocks();
-  resetPlatform();
   trucks.length = 0; oncs.length = 0; rocks.length = 0; rockT = 6; crashSide = 0; crashT = 0; fall = null; crashFall = false; crush = null; arrive = null; pickup.scale.set(1, 1, 1);
   Object.assign(P, { s: START_S, u: START_U0, v: 0, vu: 0 }); intro = null; free = FREE0 ? { x: FREE0.x, z: FREE0.z, a: FREE0.a } : null;
   tGame = 0; overtakes = 0; spawnT = 8; wrongT = 0; beepT = 0; shake = 0;
@@ -2173,7 +1715,7 @@ function step(dt) {
   // Camiones en el mismo sentido
   trucks.sort((a, b) => a.s - b.s);
   for (let i = trucks.length - 1; i >= 0; i--) {
-    const t = trucks[i], lead = trucks[i + 1]; if (t.merge) { t.v = t.merge.sp; t.vInit = false; continue; } let v = t.v0;
+    const t = trucks[i], lead = trucks[i + 1]; let v = t.v0;
     if (lead && lead.s - t.s < 34) v = Math.min(v, lead.v);
     if (t.auth && !t.passed && t.s > P.s - 6) v = 0;        // autorizó el adelantamiento: se detiene de a poco hasta que lo pases
     if (!t.vInit) { t.v = v; t.vInit = true; }
@@ -2203,7 +1745,7 @@ function step(dt) {
   pickT -= dt;
   if (pickT <= 0) { if (P.s + 260 < L - 30 && !oncs.some(o => Math.abs(o.s - (P.s + 260)) < 60)) oncs.push(mkOncPickup(P.s + 260)); pickT = 28 + Math.random() * 30; }
   }
-  updateRoad(dt); updateRocks(dt); updatePlatform(dt); updateFallRocks(dt);
+  updateRoad(dt); updateRocks(dt); updateFallRocks(dt);
   if (intro) {      // salida de la explanada: la camioneta sale sola de junto a la pala y se incorpora a su pista
     intro.t += dt; const k = Math.min(1, intro.t / 3.6), e = k * k * (3 - 2 * k), nu = intro.u0 + (-LANE - intro.u0) * e;
     P.vu = (nu - P.u) / Math.max(dt, 1e-3); P.u = nu; P.v = Math.min(CRUISE, intro.t * 3.6); P.s += P.v * dt;
@@ -2385,10 +1927,10 @@ function updateVisuals(dt) {
     pickup.position.y += Math.abs(Math.sin(ang)) * 1.0 + Math.sin(Math.PI * k) * 0.8;
   }
   const pb = pickup.getObjectByName('beacon'); if (pb) pb.material.color.setHex(Math.sin(tAnim * 7) > 0 ? 0x3d8bff : 0x0a1c4d);
-  for (const t of trucks) { if (t.merge) poseMerge(t); else place(t.mesh, t.s, t.u + (t.off || 0), 1, 0); blink(t.beacon, t.auth); }
+  for (const t of trucks) { place(t.mesh, t.s, t.u + (t.off || 0), 1, 0); blink(t.beacon, t.auth); }
   for (const o of oncs) { place(o.mesh, o.s, o.u, -1, 0); blink(o.beacon, false); if (o.spray) { o.spray.visible = o.spraying; if (o.spraying) updateSpray(o.spray, tAnim); } }
 
-  animPlatform(dt);
+  animOps(dt, tAnim);
   camMarker.visible = false; marker.visible = false;      // sin rombos ni triángulos sobre vehículos o rocas
   updateCamera(dt);
 }
@@ -2455,5 +1997,6 @@ function loop(now) {
 }
 resetGame(); camSnap = true;
 requestAnimationFrame(loop);
+
 
 

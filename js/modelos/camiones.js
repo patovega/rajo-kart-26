@@ -191,4 +191,8 @@ function updateSpray(pts, t) {      // t: reloj de animación (segundos)
   pts.geometry.attributes.position.needsUpdate = true;
 }
 
-export { buildPickup, truckBase, buildTruck, TRUCK_YEL, TRUCK_ACC, protoSame, protoOnc, CAEX_PLATE, buildAljibe, protoAlj, ALJ_PLATE, updateSpray };
+let capNum = 100;      // numeración de CAEX: siempre del 101 al 173
+const nextCaexId = () => { capNum = capNum >= 173 ? 101 : capNum + 1; return capNum; };
+const resetCaexIds = () => { capNum = 100; };      // al empezar una partida los CAEX se numeran de nuevo desde el 101
+
+export { buildPickup, truckBase, buildTruck, TRUCK_YEL, TRUCK_ACC, protoSame, protoOnc, CAEX_PLATE, buildAljibe, protoAlj, ALJ_PLATE, updateSpray, nextCaexId, resetCaexIds };
