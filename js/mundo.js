@@ -4,6 +4,8 @@ export const mundo = {
   scene: null,       // escena de THREE
   H: null,           // H(x, z): cota del terreno
   frame: null,       // frame(s): posición, tangente y derecha de la ruta
+  L: 0,              // largo de la ruta (m): el portal «SUPERFICIE»
+  CAEX_LANE: null,   // carril solo CAEX: { on, a, b, u }
   OBST: null,        // equipos detenidos y cables por el piso: { x, z, r }
   GD: null, GX0: 0, GZ0: 0, GNX: 0, GNZ: 0, CELL: 5,      // malla del terreno: código de celda (-1 piso, -2 pila, 0..WR+2 camino, 60 cara) y su geometría
   PLAT7: null,       // meseta de la isla a la cota de la fase 7 (barata para los cables)
