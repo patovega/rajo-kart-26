@@ -3,19 +3,14 @@
 export const mundo = {
   scene: null,       // escena de THREE
   H: null,           // H(x, z): cota del terreno
+  inPit: null,       // inPit(x, z): ¿está dentro del rajo (y no en la superficie)?
   frame: null,       // frame(s): posición, tangente y derecha de la ruta
   L: 0,              // largo de la ruta (m): el portal «SUPERFICIE»
   CAEX_LANE: null,   // carril solo CAEX: { on, a, b, u }
   OBST: null,        // equipos detenidos y cables por el piso: { x, z, r }
-  GD: null, GX0: 0, GZ0: 0, GNX: 0, GNZ: 0, CELL: 5,      // malla del terreno: código de celda (-1 piso, -2 pila, 0..WR+2 camino, 60 cara) y su geometría
-  PLAT7: null,       // meseta de la isla a la cota de la fase 7 (barata para los cables)
+  GD: null, GR: null, GX0: 0, GZ0: 0, GNX: 0, GNZ: 0, CELL: 4,      // malla del terreno: código de celda (-1 piso, 0..WR+2 camino, si no distancia a la ruta), GR = 1 en los caminos interiores, y su geometría
   PLAT: null,        // explanada / portón de la ruta: { se, side, D, HL, k }
   PITC: null,        // centro del rajo
-  F7EQ: null,        // equipos de la fase 7: palas, pc (PC9000), canchas
-  RED52: null,       // canchas de perforación dibujadas (funciones de distancia)
-  PIT: null,         // fondo mina: marco y palas p1 / p5
-  f7h: null,         // f7h(x, z): cota del piso de la fase 7
-  PAD_UP: 16,        // altura de la cancha sobre su piso
   GATE: null,        // portón de la Rampa Sur entre dos postes pasacables (lo deja buildPowerLine)
 };
 const _look = new THREE.Vector3();

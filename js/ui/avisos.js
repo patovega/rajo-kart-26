@@ -5,7 +5,7 @@ import { SND } from './sonido.js';
 
 /* HUD helpers */
 let alSig = '', alKeys = new Set(), alVoiceT = {};
-const AL_VOICE = { roca: 'Roca adelante', caex: 'Mantén distancia con el camión', vel: 'Exceso de velocidad', mojado: 'Piso mojado, reduce la velocidad', pl: 'Cuidado con el pretil', pr: 'Cuidado con el pretil', pista: 'Vuelve a tu pista', contra: 'Tráfico en contra', zona: 'Zona de caída de rocas' };
+const AL_VOICE = { roca: 'Roca adelante', caex: 'Mantén distancia con el camión', vel: 'Exceso de velocidad', mojado: 'Piso mojado, reduce la velocidad', pl: 'Cuidado con el pretil', pr: 'Cuidado con el pretil', pista: 'Vuelve a tu pista', contra: 'Tráfico en contra', zona: 'Zona de riesgo geotécnico' };
 function speak(txt) {      // aviso hablado, como en Waze (solo si el sonido está activo)
   try {
     if (SND.muted || !window.speechSynthesis || G.mode !== 'play') return;
@@ -27,6 +27,7 @@ function setBanner(txt, kind) {
   el.banner.textContent = txt; el.banner.className = kind || ''; el.banner.style.display = 'block';
   el.banner.style.whiteSpace = 'pre-line'; el.banner.style.textAlign = 'center'; el.banner.style.maxWidth = '92vw';
 }
+let radioTimer = 0;      // temporizador del aviso de radio (se reinicia con cada mensaje)
 function showRadio(html) {
   el.radio.innerHTML = html; el.radio.style.display = 'block';
   clearTimeout(radioTimer); radioTimer = setTimeout(() => { el.radio.style.display = 'none'; }, 4800);

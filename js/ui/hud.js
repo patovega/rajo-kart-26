@@ -1,39 +1,61 @@
-// HUD: velocímetro, metros, tiempo, adelantamientos, botón de autorización, fichas de aviso y pitidos (updateHud), y el radar de la pista (drawRadar).
+// HUD: velocímetro, metros, tiempo, adelantamientos, botón de autorización, fichas de aviso y pitidos (updateHud).
 import { CRASH_U, FOLLOW_DIST, REQ_RANGE, TAU } from '../config/diseno.js';
-import { L, START_S, ZONE_S, slickNow } from '../terreno/construir.js';
+import { GEO_ZONES, L, START_S, slickNow } from '../terreno/construir.js';
 import { fmt, pad } from '../comun/texto.js';
-import { G, P, oncs, rocasPista, trucks } from '../juego/estado.js';
+import { G, P, oncs, pickup, rocasPista, trucks } from '../juego/estado.js';
 import { $, el } from './dom.js';
 import { beep, motorRpm } from './sonido.js';
 import { renderAlerts, setBanner } from './avisos.js';
-import { ROCK_ZIG, nearestRoca } from '../juego/rocas.js';
+import { nearestRoca } from '../juego/rocas.js';
 import { findTarget, nearAuth, requestAuth } from '../juego/trafico.js';
+import { camera } from '../escena.js';
+import { dibujaMapa } from './mapa.js';
+
+/* ───────────── Brújula (solo en modo prueba: nombre «federicovega») ───────────── */
+const brujula = (() => {      // canvas bajo el velocímetro: la flecha N apunta al norte real (−z del juego) según hacia dónde mira la cámara; abajo, el rumbo en grados
+  const c = document.createElement('canvas'); c.width = c.height = 132; c.id = 'brujula';
+  Object.assign(c.style, { position: 'fixed', left: '12px', top: '128px', width: '88px', height: '88px', zIndex: 20, pointerEvents: 'none', display: 'none' });
+  document.body.appendChild(c); return c;
+})();
+/* Botón «Punto» (solo en modo prueba): copia la posición de la camioneta para pedir revisiones en el mapa */
+const punto = (() => {
+  const b = document.createElement('button'); b.id = 'punto'; b.type = 'button'; b.textContent = '📍 Punto';
+  Object.assign(b.style, { position: 'fixed', left: '12px', top: '222px', width: '88px', padding: '6px 0', zIndex: 21, display: 'none', font: '800 13px Arial', color: '#2a2622', background: 'rgba(245,240,228,0.92)', border: '3px solid #2a2622', borderRadius: '10px', cursor: 'pointer' });
+  const caja = document.createElement('div'); caja.id = 'puntoTxt';
+  Object.assign(caja.style, { position: 'fixed', left: '108px', top: '222px', maxWidth: '60vw', padding: '6px 10px', zIndex: 21, display: 'none', font: '700 13px Arial', color: '#2a2622', background: 'rgba(245,240,228,0.95)', border: '2px solid #2a2622', borderRadius: '8px', userSelect: 'text' });
+  let tCaja = 0;
+  const texto = () => { const p = pickup.position, x = p.x, z = p.z, y = p.y; camera.getWorldDirection(_dir); const r = Math.round(((Math.atan2(_dir.x, -_dir.z) * 180 / Math.PI) % 360 + 360) % 360);
+    const F = G.free, hx = F ? Math.cos(F.a) : Math.sin(pickup.rotation.y), hz = F ? Math.sin(F.a) : Math.cos(pickup.rotation.y), rc = Math.round(((Math.atan2(hx, -hz) * 180 / Math.PI) % 360 + 360) % 360);      // rumbo de la camioneta (0 = norte)
+    return `Punto Rajo Kart: x ${x.toFixed(1)}, z ${z.toFixed(1)}, cota ${(y + 1700).toFixed(1)} m (y ${y.toFixed(1)}) · UTM E ${(x + 165400).toFixed(0)} N ${(4471200 - z).toFixed(0)} · ruta s ${P.s.toFixed(0)} m${G.free ? ' (en el piso, fuera de la ruta)' : ''} · mirando a ${r}° · camioneta hacia ${rc}°${P.v < 0.5 ? ' (detenida)' : ''}`; };
+  const mostrar = (t, ok) => { caja.textContent = t + (ok ? '  ✔ copiado' : '  (selecciona y copia)'); caja.style.display = 'block'; clearTimeout(tCaja); tCaja = setTimeout(() => { caja.style.display = 'none'; }, 9000); };
+  b.addEventListener('click', e => { e.preventDefault(); const t = texto(); console.log(t); b.blur();
+    try { navigator.clipboard.writeText(t).then(() => mostrar(t, true), () => mostrar(t, false)); } catch (_) { mostrar(t, false); } });
+  document.body.appendChild(b); document.body.appendChild(caja); return { b, caja };
+})();
+const _dir = new THREE.Vector3();
+function drawBrujula() {
+  if (!G.TEST || G.mode !== 'play') { brujula.style.display = 'none'; punto.b.style.display = 'none'; punto.caja.style.display = 'none'; return; }
+  brujula.style.display = 'block'; punto.b.style.display = 'block';
+  camera.getWorldDirection(_dir); const rumbo = Math.atan2(_dir.x, -_dir.z);      // 0 = norte, π/2 = este (x = este, z = sur)
+  const x = brujula.getContext('2d'), R = 60; x.clearRect(0, 0, 132, 132); x.save(); x.translate(66, 66);
+  x.fillStyle = 'rgba(245,240,228,0.92)'; x.strokeStyle = '#2a2622'; x.lineWidth = 3; x.beginPath(); x.arc(0, 0, R, 0, TAU); x.fill(); x.stroke();
+  x.rotate(-rumbo);      // la rosa gira: el norte queda donde corresponde respecto de la vista
+  for (let k = 0; k < 36; k++) { const a = k * TAU / 36, l = k % 9 === 0 ? 10 : 5; x.strokeStyle = '#2a2622'; x.lineWidth = k % 9 === 0 ? 2.5 : 1; x.beginPath(); x.moveTo(Math.sin(a) * (R - 2), -Math.cos(a) * (R - 2)); x.lineTo(Math.sin(a) * (R - 2 - l), -Math.cos(a) * (R - 2 - l)); x.stroke(); }
+  x.font = '800 17px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  for (const [s, a] of [['N', 0], ['E', TAU / 4], ['S', TAU / 2], ['O', 3 * TAU / 4]]) { x.fillStyle = s === 'N' ? '#c9141c' : '#2a2622'; x.fillText(s, Math.sin(a) * (R - 22), -Math.cos(a) * (R - 22)); }
+  x.fillStyle = '#c9141c'; x.beginPath(); x.moveTo(0, -30); x.lineTo(7, 0); x.lineTo(-7, 0); x.fill();      // aguja norte
+  x.fillStyle = '#6b6560'; x.beginPath(); x.moveTo(0, 30); x.lineTo(7, 0); x.lineTo(-7, 0); x.fill();
+  x.restore();
+  x.fillStyle = '#2a2622'; x.beginPath(); x.moveTo(66, 2); x.lineTo(60, 12); x.lineTo(72, 12); x.fill();      // marca fija: hacia dónde miras
+  x.font = '700 15px Arial'; x.textAlign = 'center'; x.fillStyle = '#2a2622'; x.fillText(Math.round(((rumbo * 180 / Math.PI) % 360 + 360) % 360) + '°', 66, 88);
+}
 
 /* ───────────── Radar ───────────── */
 el.altmax.textContent = Math.round(L - START_S);
 el.auth.addEventListener('click', requestAuth);
-const rc = $('radar'), rx = rc.getContext('2d'); rx.scale(2, 2);
-function drawRadar() {
-  const W = 120, Hh = 240, sx = W / 28, sy = Hh / 170, behind = 35;
-  const X = u => W / 2 + u * sx, Y = ds => Hh - (ds + behind) * sy;
-  rx.clearRect(0, 0, W, Hh);
-  rx.fillStyle = '#2e2a26'; rx.fillRect(0, 0, W, Hh);
-  rx.fillStyle = '#6f5f48'; rx.fillRect(X(-12.1), 0, 24.2 * sx, Hh);
-  rx.strokeStyle = '#f2efe6'; rx.lineWidth = 1.5; rx.beginPath(); rx.moveTo(X(-12.1), 0); rx.lineTo(X(-12.1), Hh); rx.moveTo(X(12.1), 0); rx.lineTo(X(12.1), Hh); rx.stroke();
-  rx.strokeStyle = '#f2b705'; rx.setLineDash([6, 6]); rx.beginPath(); rx.moveTo(X(0), 0); rx.lineTo(X(0), Hh); rx.stroke(); rx.setLineDash([]);
-  const veh = (s, u, w, l, fill, stroke) => {
-    const ds = s - P.s; if (ds < -behind - l || ds > 135 + l) return;
-    rx.fillStyle = fill; rx.fillRect(X(u) - w * sx / 2, Y(ds) - l * sy / 2, w * sx, l * sy);
-    if (stroke) { rx.strokeStyle = stroke; rx.lineWidth = 2; rx.strokeRect(X(u) - w * sx / 2, Y(ds) - l * sy / 2, w * sx, l * sy); }
-  };
-  for (const c of rocasPista) { const ds = c.s - P.s; if (ds < -behind - 4 || ds > 140) continue; rx.fillStyle = '#b3a592'; rx.strokeStyle = '#2a2018'; rx.lineWidth = 1.5; rx.beginPath(); rx.arc(X(c.u), Y(ds), c.r * sx, 0, TAU); rx.fill(); rx.stroke(); }
-  for (const t of trucks) veh(t.s, t.u, 7.2, 12, '#f7c600', t.auth ? '#35d27a' : '#241a10');
-  for (const o of oncs) veh(o.s, o.u, o.kind === 'pickup' ? 2.6 : 7.2, o.kind === 'pickup' ? 5.5 : 12, o.kind === 'aljibe' ? '#3a8fe8' : (o.kind === 'pickup' ? '#f2f2f2' : '#f7c600'), (o.s - P.s) < 110 && (o.s - P.s) > 0 ? '#ff3b3b' : '#9a948a');
-  veh(P.s, P.u, 2.4, 5, '#ff2a2a', '#fff');
-  rx.fillStyle = 'rgba(255,255,255,.7)'; rx.font = '10px sans-serif'; rx.fillText('IZQ', 6, Hh - 6); rx.fillText('DER', W - 24, Hh - 6);
-}
 
 function updateHud() {
+  drawBrujula(); dibujaMapa();
   const kmh = P.v * 3.6;
   el.kmh.textContent = Math.round(kmh);
   el.bar.style.width = Math.min(100, kmh / 90 * 100) + '%';
@@ -61,7 +83,7 @@ function updateHud() {
   if (kmh > 60 && !G.TEST) A('vel', 'SIGN:' + Math.round(kmh), '', 'Límite 60', 'bad');
   else if (kmh >= 56) A('vel', 'SIGN:60', '', 'Cerca del límite', 'warn');
   if (slickNow(P.s) > 0.3) A('mojado', '💧', '', 'Piso mojado', 'warn');
-  if (!G.TEST && P.s > ZONE_S - 110 && P.s < ZONE_S + ROCK_ZIG[2][0] + 12) A('zona', '⛰', '', 'Caída de rocas', 'warn');
+  { const zn = GEO_ZONES.find(z => P.s > z.a - 110 && P.s < z.b); if (zn) A('zona', '⛰', P.s < zn.a ? Math.round(zn.a - P.s) + ' m' : '', 'Riesgo geotécnico', 'warn'); }      // aviso 110 m antes y mientras dura cada tramo de riesgo
   if (G.wrongT > 1.5) A('pista', '↩', '', 'Tu pista', 'bad');
   else if (oncNear) A('contra', '🚗', '', 'En contra', 'bad');
   al.sort((a, b) => (b.sev === 'bad') - (a.sev === 'bad'));
@@ -76,4 +98,4 @@ function updateHud() {
   motorRpm(P.v);
 }
 
-export { updateHud, drawRadar };
+export { updateHud };

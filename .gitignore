@@ -45,3 +45,6 @@ $RECYCLE.BIN/
 .idea/
 *.sublime-project
 *.sublime-workspace
+
+# Planos de la mina (archivos CAD pesados, no se publican)
+/plano/

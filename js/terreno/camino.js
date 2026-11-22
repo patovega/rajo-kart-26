@@ -1,9 +1,9 @@
-// Camino de tierra: calzada con tramos mojados por el aljibe (seedWet, updateRoad, slickNow), de qué lado hay caída (isDrop, inGap), pretiles, postes delineadores, postes del portal con banderas y señalética de distancia.
+// Camino de tierra: calzada con tramos mojados por el aljibe (seedWet, updateRoad, slickNow), de qué lado hay caída (isDrop, inGap), pretiles, postes delineadores, postes del portal con banderas y la banda de los tramos de riesgo geotécnico (GEO_ZONES) por la orilla de la pared.
 import { PRET, WR } from '../config/diseno.js';
 import { hash } from '../comun/mates.js';
 import { bas, box, cyl, lam } from '../modelos/materiales.js';
 import { paso } from '../comun/pasos.js';
-import { L, PLAT, SMAX, SMIN, START_S, ZONE_S, frame, hrAt } from './ruta.js';
+import { GEO_ZONES, L, PLAT, SMAX, SMIN, START_S, frame, hrAt } from './ruta.js';
 import { H } from './alturas.js';
 import { scene } from '../escena.js';
 
@@ -149,40 +149,22 @@ berm(-PRET); berm(PRET);      // pretil a cada lado solo donde ese lado cae
   }
 })();
 
-(() => { // señalética de distancia cada 200 m desde el inicio (0, 200, 400...), a ambos lados del camino, de cara a la pista
-  const post = lam(0x2f2c29), endS = L + 205;      // mismo fin que END_S (esa constante se define más abajo)
-  const mkTex = t => { const c = document.createElement('canvas'); c.width = 256; c.height = 128; const x = c.getContext('2d');
-    x.fillStyle = '#f5f5f5'; x.fillRect(0, 0, 256, 128); x.strokeStyle = '#1b1b18'; x.lineWidth = 10; x.strokeRect(5, 5, 246, 118);
-    x.fillStyle = '#1b1b18'; x.font = '800 74px Arial Narrow, Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(t, 128, 66);
-    return new THREE.CanvasTexture(c); };
-  for (let d = 0; START_S + d <= endS; d += 200) {
-    const f = frame(START_S + d), tex = mkTex(d + ' m');
-    for (const side of [-1, 1]) {
-      const u = side * 13.8, x = f.x + f.rx * u, z = f.z + f.rz * u, g = new THREE.Group();      // en el hombro plano del camino (no dentro de la pared)
-      box(g, 0.2, 3.2, 0.2, post, 0, 1.6, 0);                                                    // poste
-      const plate = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 2.0), new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }));
-      plate.position.set(0, 3.9, 0.12); g.add(plate);
-      g.position.set(x, H(x, z), z);
-      g.rotation.y = side < 0 ? Math.atan2(f.rx, f.rz) : Math.atan2(-f.rx, -f.rz);            // cara hacia el centro del camino
-      scene.add(g);
+(() => { // tramos de riesgo geotécnico (GEO_ZONES): banda a cuadros amarillos y negros por la orilla del camino que da a la cara del banco (nunca por la orilla que mira al rajo)
+  const c1 = new THREE.Color(0xf2b800), c2 = new THREE.Color(0x1b1b18), pos = [], col = [], idx = [];
+  const lado = s => { const f = frame(s); let hi = 0; for (const u of [WR + 6, WR + 12]) hi += H(f.x + f.rx * u, f.z + f.rz * u) - H(f.x - f.rx * u, f.z - f.rz * u); return hi > 0 ? 1 : -1; };      // +1: la pared está a la derecha
+  for (const zn of GEO_ZONES) {
+    const sides = []; for (let s = zn.a; s <= zn.b; s += 2) sides.push(lado(s));
+    for (let k = 0; k < sides.length; k++) { let sum = 0, n = 0; for (let j = Math.max(0, k - 5); j <= Math.min(sides.length - 1, k + 5); j++) { sum += sides[j]; n++; } sides[k] = sum >= 0 ? 1 : -1; }      // sin cambios de lado por baches: mayoría en 20 m
+    for (let k = 0; k < sides.length - 1; k++) {
+      const s = zn.a + k * 2, side = sides[k], u = side * 13.6, c = (k >> 1) % 2 ? c1 : c2, v = pos.length / 3;      // cuadros de 4 m, pegados al borde de la calzada del lado de la pared
+      for (const ss of [s, s + 2]) { const f = frame(ss); for (const du of [-0.9, 0.9]) { const x = f.x + f.rx * (u + du), z = f.z + f.rz * (u + du); pos.push(x, H(x, z) + 0.16, z); col.push(c.r, c.g, c.b); } }
+      idx.push(v, v + 1, v + 2, v + 1, v + 3, v + 2);
     }
   }
-})();
-(() => { // cartel: zona de caída de rocas (antes de la zona, a la izquierda del camino, mirando a quien sube)
-  const g = new THREE.Group(), f = frame(ZONE_S - 55), post = lam(0x2f2c29);
-  const c = document.createElement('canvas'); c.width = 512; c.height = 256; const x = c.getContext('2d');
-  x.fillStyle = '#f2b800'; x.fillRect(0, 0, 512, 256); x.strokeStyle = '#1b1b18'; x.lineWidth = 14; x.strokeRect(7, 7, 498, 242);
-  x.fillStyle = '#1b1b18'; x.beginPath(); x.moveTo(78, 52); x.lineTo(138, 160); x.lineTo(18, 160); x.closePath(); x.fill();           // triángulo de peligro
-  x.fillStyle = '#f2b800'; x.beginPath(); x.moveTo(78, 76); x.lineTo(118, 148); x.lineTo(38, 148); x.closePath(); x.fill();
-  x.fillStyle = '#1b1b18'; for (const [cx, cy, r] of [[66, 104, 9], [90, 120, 11], [74, 138, 8]]) { x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill(); }   // rocas cayendo
-  x.fillStyle = '#1b1b18'; x.font = '800 54px Arial Narrow, Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.fillText('ZONA DE CAÍDA', 322, 96); x.fillText('DE ROCAS', 322, 160);
-  x.font = '700 30px Arial, sans-serif'; x.fillText('ESQUIVA POR EL ZIGZAG', 322, 214);
-  box(g, 0.35, 6.4, 0.35, post, -3.6, 3.2, 0); box(g, 0.35, 6.4, 0.35, post, 3.6, 3.2, 0);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 4.2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), side: THREE.DoubleSide }));
-  sign.position.set(0, 7.4, 0); g.add(sign);
-  const gx = f.x + f.rx * -21, gz = f.z + f.rz * -21; g.position.set(gx, H(gx, gz), gz);
-  g.rotation.y = Math.atan2(-f.rz, f.rx); scene.add(g);
+  if (!idx.length) return;
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); geo.setIndex(idx);
+  const m = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }); m.polygonOffset = true; m.polygonOffsetFactor = -3; m.polygonOffsetUnits = -3;      // por encima de la calzada (que ya usa −1)
+  scene.add(new THREE.Mesh(geo, m));
 })();
 
 export { slickNow, wetRange, seedWet, updateRoad, GAP, inGap, DROP, isDrop, berm };

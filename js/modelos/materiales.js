@@ -86,4 +86,22 @@ const grimeTex = (() => {      // camión con uso: polvo pegado, manchas de barr
 })();
 const TRK = lam(0x585b5f), TRK2 = lam(0x3d4043);      // orugas gris oscuro (palas, bulldozers y perforadoras); zapatas más oscuras
 
+// Carga de los camiones: material tronado fino y grueso en gris roca — un montón parejo de fino con textura granulada y colpas gruesas encima
+const fineMat = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); x.fillStyle = '#7a7770'; x.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 2600; i++) { const v = 85 + ((i * 2654435761) >>> 0) % 80; x.fillStyle = `rgb(${v + 6},${v + 3},${v - 2})`; x.fillRect(((i * 97) % 128), ((i * 61 + (i >> 3)) % 128), 1 + (i % 3 === 0), 1 + (i % 5 === 0)); }
+  const tx = new THREE.CanvasTexture(c); tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(3, 3); return lam(0xffffff, { map: tx }); })();
+const fineGeo = (() => { const gm = new THREE.SphereGeometry(1, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), p = gm.attributes.position;
+  for (let i = 0; i < p.count; i++) { const y = p.getY(i), k = 1 + 0.05 * Math.sin(p.getX(i) * 9.1 + p.getZ(i) * 6.3) * Math.sin(p.getZ(i) * 7.7 - p.getX(i) * 3.1) * (y > 0.05 ? 1 : 0); p.setXYZ(i, p.getX(i) * k, y * k, p.getZ(i) * k); }
+  gm.computeVertexNormals(); return gm; })();
+const coarseMats = [lam(0x7b7975), lam(0x908d87), lam(0x5f5d59), lam(0x6f6a62)];
+function finePile(sx, sy, sz) {      // montón de fino (semielipsoide sx × sy × sz) con ~26 colpas gruesas apoyadas en su superficie
+  const g = new THREE.Group(), m = new THREE.Mesh(fineGeo, fineMat); m.scale.set(sx, sy, sz); g.add(m);
+  for (let i = 0; i < 26; i++) {
+    const a = ((i * 0.618034) % 1) * Math.PI * 2, r = Math.sqrt(((i * 0.381966 + 0.13) % 1)) * 0.85, x = Math.cos(a) * r * sx, z = Math.sin(a) * r * sz;
+    const y = sy * Math.sqrt(Math.max(0, 1 - (x / sx) ** 2 - (z / sz) ** 2)), sc = 0.3 + ((i * 0.7548) % 1) * 0.6;
+    const rk = new THREE.Mesh(rockGeo, coarseMats[i % 4]); rk.scale.set(sc, sc * 0.7, sc); rk.position.set(x, y + sc * 0.12, z); rk.rotation.set(i * 1.3, i * 2.1, i * 0.7); g.add(rk);
+  }
+  return g;
+}
+export { fineMat, finePile };
 export { lam, bas, box, cyl, blob, brakeMat, brakeGlowMat, rockGeo, plateMat, truckPlateMat, addPlates, GRILLE_MAT, TIRE_MATS, rimMats, grimeTex, TRK, TRK2 };

@@ -43,6 +43,7 @@ function updateFall(dt) {       // se pasó el pretil del lado del rajo: rueda p
   pickup.quaternion.copy(F.q); pickup.position.copy(F.p).sub(_fo);
   P.y = Math.max(0, F.p.y - 1.1);
 }
+const PERT = { a: 0, w: 0, z: 0, wz: 0, v0: 0 };      // estado del resorte de la pértiga
 function updateVisuals(dt) {
   if (G.free) { setWorldPose(pickup, G.free.x, G.free.z, Math.cos(G.free.a), Math.sin(G.free.a)); P.y = pickup.position.y; }
   else P.y = place(pickup, P.s, P.u, G.arrive && G.arrive.park ? -1 : 1, P.vu / Math.max(P.v, 3) * 0.6);      // en reversa al estacionar
@@ -64,6 +65,11 @@ function updateVisuals(dt) {
     pickup.rotateZ(ang);
     pickup.position.y += Math.abs(Math.sin(ang)) * 1.0 + Math.sin(Math.PI * k) * 0.8;
   }
+  { const pe = pickup.getObjectByName('pertiga');      // la pértiga se echa hacia atrás con la velocidad y la aceleración, y cabecea hacia adelante al frenar (resorte amortiguado)
+    if (pe) { const h = Math.min(dt, 0.05), acc = (P.v - PERT.v0) / Math.max(h, 1e-3); PERT.v0 = P.v;
+      const tgt = -Math.min(0.3, P.v / 22 * 0.22) - Math.max(-0.35, Math.min(0.35, acc * 0.018)), tz = Math.max(-0.1, Math.min(0.1, -P.vu * 0.02));
+      PERT.w += (70 * (tgt - PERT.a) - 7 * PERT.w) * h; PERT.a += PERT.w * h; PERT.wz += (70 * (tz - PERT.z) - 7 * PERT.wz) * h; PERT.z += PERT.wz * h;
+      pe.rotation.x = PERT.a; pe.rotation.z = PERT.z; } }
   const pb = pickup.getObjectByName('beacon'); if (pb) pb.material.color.setHex(Math.sin(G.tAnim * 7) > 0 ? 0x3d8bff : 0x0a1c4d);
   for (const t of trucks) { place(t.mesh, t.s, t.u + (t.off || 0), 1, 0); blink(t.beacon, t.auth); }
   for (const o of oncs) { place(o.mesh, o.s, o.u, -1, 0); blink(o.beacon, false); if (o.spray) { o.spray.visible = o.spraying; if (o.spraying) updateSpray(o.spray, G.tAnim); } }

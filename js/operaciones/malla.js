@@ -3,13 +3,14 @@ import { mundo as M } from '../mundo.js';
 import { WR } from '../config/diseno.js';
 
 const gdAt = (x, z) => { const fx = Math.round((x - M.GX0) / M.CELL), fz = Math.round((z - M.GZ0) / M.CELL); return (fx < 0 || fz < 0 || fx >= M.GNX || fz >= M.GNZ) ? 99 : M.GD[fz * M.GNX + fx]; };
-const onRoadC = (x, z) => { const g = gdAt(x, z); return g >= 0 && g <= WR + 1; };
+const grAt = (x, z) => { const fx = Math.round((x - M.GX0) / M.CELL), fz = Math.round((z - M.GZ0) / M.CELL); return (fx < 0 || fz < 0 || fx >= M.GNX || fz >= M.GNZ) ? 0 : M.GR[fz * M.GNX + fx]; };
+const onRoadC = (x, z) => { const g = gdAt(x, z); return (g >= 0 && g <= WR + 1) || grAt(x, z) === 1; };      // la ruta o un camino interior: ahí los cables van por postes
 function floorPath(S, T) {      // huellas: camino más corto por el piso (o calzada) entre S y T, manteniéndose ~15 m lejos de paredes, pilas, canchas y equipos
   const pad = 260, i0 = Math.max(1, Math.floor((Math.min(S.x, T.x) - pad - M.GX0) / M.CELL)), i1 = Math.min(M.GNX - 2, Math.ceil((Math.max(S.x, T.x) + pad - M.GX0) / M.CELL)), j0 = Math.max(1, Math.floor((Math.min(S.z, T.z) - pad - M.GZ0) / M.CELL)), j1 = Math.min(M.GNZ - 2, Math.ceil((Math.max(S.z, T.z) + pad - M.GZ0) / M.CELL));
   const W = i1 - i0 + 1, Hh = j1 - j0 + 1, N = W * Hh, pass = new Uint8Array(N), cost = new Float32Array(N);
-  const blk = M.OBST.filter(o => o.r >= 6);
-  for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) { const g = M.GD[(j + j0) * M.GNX + i + i0]; pass[j * W + i] = (g === -1 || (g >= 0 && g <= WR + 2)) ? 1 : 0; }
-  for (const o of blk) { const r = o.r + 6, ci = Math.round((o.x - M.GX0) / M.CELL) - i0, cj = Math.round((o.z - M.GZ0) / M.CELL) - j0, n = Math.ceil(r / M.CELL); for (let dj = -n; dj <= n; dj++) for (let di = -n; di <= n; di++) { const i = ci + di, j = cj + dj; if (i < 0 || j < 0 || i >= W || j >= Hh || Math.hypot(di, dj) * M.CELL > r) continue; pass[j * W + i] = 0; } }
+  const blk = M.OBST.filter(o => o.r >= 6 || o.r <= 1.6);      // equipos, y también cables por el piso y postes (los camiones no los pisan)
+  for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) { const k = (j + j0) * M.GNX + i + i0, g = M.GD[k]; pass[j * W + i] = (g === -1 || (g >= 0 && g <= WR + 2) || M.GR[k] === 1) ? 1 : 0; }
+  for (const o of blk) { const r = o.r >= 6 ? o.r + 6 : o.r + 2.5, ci = Math.round((o.x - M.GX0) / M.CELL) - i0, cj = Math.round((o.z - M.GZ0) / M.CELL) - j0, n = Math.ceil(r / M.CELL); for (let dj = -n; dj <= n; dj++) for (let di = -n; di <= n; di++) { const i = ci + di, j = cj + dj; if (i < 0 || j < 0 || i >= W || j >= Hh || Math.hypot(di, dj) * M.CELL > r) continue; pass[j * W + i] = 0; } }
   for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) { if (!pass[j * W + i]) continue; let n = 0; for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) { const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= W || b >= Hh || !pass[b * W + a]) n++; } cost[j * W + i] = 1 + 0.5 * n; }
   const ci = p => (Math.max(0, Math.min(Hh - 1, Math.round((p.z - M.GZ0) / M.CELL) - j0))) * W + Math.max(0, Math.min(W - 1, Math.round((p.x - M.GX0) / M.CELL) - i0));
   const s = ci(S), t = ci(T); pass[s] = pass[t] = 1; if (!cost[s]) cost[s] = 1; if (!cost[t]) cost[t] = 1;
@@ -23,12 +24,23 @@ function floorPath(S, T) {      // huellas: camino más corto por el piso (o cal
   const out = []; for (let i = t; i >= 0; i = from[i]) { out.push({ x: M.GX0 + (i % W + i0) * M.CELL, z: M.GZ0 + ((i / W | 0) + j0) * M.CELL }); if (i === s) break; }
   out.reverse(); const keep = [out[0]]; for (let k = 1; k < out.length - 1; k += 3) keep.push(out[k]); keep.push(out[out.length - 1]); return keep;
 }
-function cableRoute(S, T, avoid) {      // recorrido más barato por la malla: caras y bermas de los bancos baratas; pisos donde se circula, pilas y caminos caros (un camino se cruza solo si hace falta)
+let BANCO = null;
+function bancos() {      // celdas de banco: caras (pendiente > 0,4) y bermas pegadas a ellas (a ≤ 2 celdas); un cable ahí se corta con la caída de rocas
+  if (BANCO) return BANCO;
+  const nx = M.GNX, nz = M.GNZ, h = new Float32Array(nx * nz), st = [];
+  for (let k = 0; k < h.length; k++) h[k] = M.H(M.GX0 + (k % nx) * M.CELL, M.GZ0 + Math.floor(k / nx) * M.CELL);
+  for (let iz = 1; iz < nz - 1; iz++) for (let ix = 1; ix < nx - 1; ix++) { const i = iz * nx + ix; if (Math.max(Math.abs(h[i + 1] - h[i - 1]), Math.abs(h[i + nx] - h[i - nx])) / (2 * M.CELL) > 0.4) st.push(i); }
+  BANCO = new Uint8Array(nx * nz);
+  for (const i of st) { const ix = i % nx, iz = (i / nx) | 0; for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) { const a = ix + dx, b = iz + dz; if (a >= 0 && b >= 0 && a < nx && b < nz) BANCO[b * nx + a] = 1; } }
+  return BANCO;
+}
+const esBanco = (x, z) => bancos()[Math.max(0, Math.min(M.GNZ - 1, Math.round((z - M.GZ0) / M.CELL))) * M.GNX + Math.max(0, Math.min(M.GNX - 1, Math.round((x - M.GX0) / M.CELL)))] === 1;
+function cableRoute(S, T, avoid) {      // recorrido más barato por la malla: baja por los bancos; pisos donde se circula, pilas, caminos y su orilla caros (un camino se cruza solo si hace falta, por postes)
   const N = M.GNX * M.GNZ, ci = (x, z) => Math.max(0, Math.min(M.GNZ - 1, Math.round((z - M.GZ0) / M.CELL))) * M.GNX + Math.max(0, Math.min(M.GNX - 1, Math.round((x - M.GX0) / M.CELL)));
   const extra = new Float32Array(N), mark = (x, z, r, c) => { for (let dz = -r; dz <= r; dz += M.CELL) for (let dx = -r; dx <= r; dx += M.CELL) if (dx * dx + dz * dz <= r * r) { const i = ci(x + dx, z + dz); extra[i] = Math.max(extra[i], c); } };
   M.OBST.forEach(o => { if (o.r >= 3) mark(o.x, o.z, o.r + 2, 1e4); });      // equipos: no pasa por debajo
   (avoid || []).forEach(p => mark(p.x, p.z, p.r, 80));      // donde circulan camiones o la camioneta
-  const cost = i => { const d = M.GD[i]; let c = (d >= 0 && d <= WR + 1) ? 40 : d === -1 ? (M.PLAT7[i] ? 2 : 25) : d === -2 ? 30 : 1; return c + extra[i]; };
+  const cost = i => { const d = M.GD[i]; let c = ((d >= 0 && d <= WR + 1) || M.GR[i] === 1) ? 40 : (d > WR + 1 && d <= WR + 13) ? 8 : d === -1 ? 25 : 1; return c + extra[i]; };      // bancos baratos: el cable baja por las caras y bermas hacia la pala; la orilla del camino cara para que no lo vaya rodeando      // caminos (ruta e interiores) caros: se cruzan solo si hace falta, y por postes
   const s = ci(S.x, S.z), t = ci(T.x, T.z), tx = t % M.GNX, tz = Math.floor(t / M.GNX);
   const g = new Float32Array(N).fill(Infinity), from = new Int32Array(N).fill(-1), done = new Uint8Array(N);
   const hp = [], hv = [], push = (i, f) => { hp.push(i); hv.push(f); let k = hp.length - 1; while (k > 0) { const q = (k - 1) >> 1; if (hv[q] <= hv[k]) break; [hp[q], hp[k]] = [hp[k], hp[q]]; [hv[q], hv[k]] = [hv[k], hv[q]]; k = q; } };
@@ -47,4 +59,4 @@ function cableRoute(S, T, avoid) {      // recorrido más barato por la malla: c
   return P;
 }
 
-export { gdAt, onRoadC, floorPath, cableRoute };
+export { gdAt, onRoadC, floorPath, cableRoute, esBanco };

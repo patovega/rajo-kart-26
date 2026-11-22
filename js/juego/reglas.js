@@ -8,7 +8,7 @@ import { pad } from '../comun/texto.js';
 import { G, P, endGame, inp, keys, oncs, pickup, rocasPista, rocks, trucks } from './estado.js';
 import { beep } from '../ui/sonido.js';
 import { cotillon, metaMensaje, renderAlerts, setBanner, speak } from '../ui/avisos.js';
-import { mkRoca, resetFallRocks, updateFallRocks, updateRocks } from './rocas.js';
+import { mkRoca, updateRocks } from './rocas.js';
 import { mkAlj, mkSame, stepDozer, stepTrafico } from './trafico.js';
 import { stepFree } from './libre.js';
 import { stepArrival } from './llegada.js';
@@ -21,7 +21,6 @@ function resetGame() {
   for (const c of rocasPista) scene.remove(c.mesh);
   rocasPista.length = 0;
   if (!G.TEST) for (let cs = START_S + 130 + Math.random() * 40; cs < L - 70; cs += 150 + Math.random() * 130) if (!PLAT || Math.abs(cs - PLAT.se) > PLAT.HL + 60) rocasPista.push(mkRoca(cs));
-  resetFallRocks();
   trucks.length = 0; oncs.length = 0; rocks.length = 0; G.rockT = 6; G.crashSide = 0; G.crashT = 0; G.fall = null; G.crashFall = false; G.crush = null; G.arrive = null; pickup.scale.set(1, 1, 1);
   Object.assign(P, { s: START_S, u: START_U0, v: 0, vu: 0 }); G.intro = null; G.free = G.FREE0 ? { x: G.FREE0.x, z: G.FREE0.z, a: G.FREE0.a } : null;
   G.tGame = 0; G.overtakes = 0; G.spawnT = 8; G.wrongT = 0; G.beepT = 0; G.shake = 0;
@@ -42,7 +41,7 @@ function step(dt) {
   G.tGame += dt;
 
   stepTrafico(dt);
-  updateRoad(dt); updateRocks(dt); updateFallRocks(dt);
+  updateRoad(dt); updateRocks(dt);
   if (G.intro) {      // salida de la explanada: la camioneta sale sola de junto a la pala y se incorpora a su pista
     G.intro.t += dt; const k = Math.min(1, G.intro.t / 3.6), e = k * k * (3 - 2 * k), nu = G.intro.u0 + (-LANE - G.intro.u0) * e;
     P.vu = (nu - P.u) / Math.max(dt, 1e-3); P.u = nu; P.v = Math.min(CRUISE, G.intro.t * 3.6); P.s += P.v * dt;

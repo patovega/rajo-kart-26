@@ -1,18 +1,16 @@
-// Cables de las palas y energía: postes pasacables (cablePost), subestaciones, SEM 6, cable de la ruta hasta la PC9000 (buildPowerLine, deja M.GATE) y cables dibujados de las otras palas (buildCable2).
+// Cables de las palas y energía sobre el terreno real: postes pasacables (cablePost), subestación de la pala de la fase 7 en la superficie con su cable y el portón de la rampa
+// (buildPowerLine, deja M.GATE), y SEM 6 junto a la tercera curva del camino al fondo con los cables de las palas del fondo (buildCable2). Cada cable baja por las paredes del rajo (cableRoute) y, donde cruza un camino, sube a dos postes.
 import { mundo as M } from '../mundo.js';
 import { WR } from '../config/diseno.js';
-import { RIMPOLY, SEM6 } from '../datos/caminos.js';
-import { D52 } from '../datos/fase7.js';
-import { hash, inPoly, sm01 } from '../comun/mates.js';
-import { box, cyl, lam } from '../modelos/materiales.js';
-import { cableRoute, onRoadC } from './malla.js';
+import { SEM6_DWG } from '../datos/terreno_dwg.js';
+import { hash } from '../comun/mates.js';
+import { bas, box, cyl, lam } from '../modelos/materiales.js';
+import { OPS } from './carguio.js';
+import { cableRoute, gdAt, onRoadC } from './malla.js';
 
-// Cables de las palas (como en la mina): van tendidos por el suelo desde una subestación en el borde del rajo, por las caras y bermas de los bancos, donde no anda nadie.
-// Solo donde un vehículo tiene que pasar (un camino o la entrada a la Rampa Sur) el cable sube a un par de postes pasacables de 18 m y cruza por arriba.
-const SHOV_AL = -20, SPOT_AL = [SHOV_AL - 24, SHOV_AL + 24], ARR_LA = WR + 2, SPOT_LA = WR + 13;      // franja por donde circulaban los camiones de la antigua pala 3 junto a la Rampa Sur: sigue siendo zona a evitar para que el cable de la ruta no cambie de trazado
-const CABLES = { CABLE: null, CABLE2: null };      // cable de la ruta (PC9000) y primer cable dibujado (para el arnés de pruebas)
+const CABLES = { CABLE: null, CABLE2: null };      // cable de la ruta (pala 2) y primer cable del fondo (para el arnés de pruebas)
 const pl = (al, la) => { const f = M.frame(M.PLAT.se + al); return { x: f.x + f.rx * M.PLAT.side * la, z: f.z + f.rz * M.PLAT.side * la, tx: f.tx, tz: f.tz, nx: f.rx * M.PLAT.side, nz: f.rz * M.PLAT.side }; };
-const CTOP = 18.2;
+const CTOP = 18.2;      // altura del cable en los postes
 function cablePost(x, z, ax, az) {      // poste pasacables rojo y blanco de 18 m (si ya hay uno en ese punto, se comparte)
   if (M.OBST.some(o => o.r === 1.6 && Math.hypot(o.x - x, o.z - z) < 3)) return;
   const red = lam(0xe0401a), wh = lam(0xf4f4f4), g = new THREE.Group();
@@ -21,20 +19,39 @@ function cablePost(x, z, ax, az) {      // poste pasacables rojo y blanco de 18 
   g.position.set(x, M.H(x, z), z); g.rotation.y = Math.atan2(ax, az) + Math.PI / 2; M.scene.add(g); M.OBST.push({ x, z, r: 1.6 });
 }
 function cableSpan(out, a, b, n) { const ya = M.H(a.x, a.z) + CTOP, yb = M.H(b.x, b.z) + CTOP; for (let k = 1; k < n; k++) { const t = k / n; out.push(new THREE.Vector3(a.x + (b.x - a.x) * t, ya + (yb - ya) * t - 5.6 * t * (1 - t), a.z + (b.z - a.z) * t)); } out.push(new THREE.Vector3(b.x, yb, b.z)); }
-function buildSem6() {      // SEM 6: dos contenedores unidos (sala eléctrica) + subestación + letrero, en su patio junto al verde
-  const g = new THREE.Group(), wh = lam(0xe6e2d6), bl = lam(0x2f4f8f), dk = lam(0x2b2e33), gr = lam(0x8d9196);
-  for (const dz of [-1.35, 1.35]) { box(g, 12.2, 2.9, 2.6, wh, 0, 1.45 + 0.3, dz); box(g, 12.3, 0.5, 2.7, bl, 0, 0.55, dz); box(g, 12.3, 0.3, 2.7, bl, 0, 3.05, dz); }
-  box(g, 12.4, 0.3, 5.6, dk, 0, 0.15, 0);      // base
-  box(g, 0.9, 2.0, 0.08, dk, -4.5, 1.3, 2.66); box(g, 0.9, 2.0, 0.08, dk, 4.5, 1.3, -2.66);      // puertas
-  for (const sx of [-3, 0, 3]) box(g, 1.2, 0.8, 0.6, gr, sx, 3.5, 0);      // equipos de clima en el techo
-  cyl(g, 0.08, 0.08, 9, gr, 7.5, 4.5, 2.2); box(g, 1.6, 1.0, 0.1, lam(0xd8d8d8), 7.5, 8.2, 2.2);      // mástil con antena
-  g.position.set(SEM6.x, M.H(SEM6.x, SEM6.z), SEM6.z); g.rotation.y = -SEM6.rot; M.scene.add(g);
-  M.OBST.push({ x: SEM6.x, z: SEM6.z, r: 8 });
-  const sx = SEM6.x + Math.cos(SEM6.rot) * 2 - Math.sin(SEM6.rot) * 14, sz = SEM6.z + Math.sin(SEM6.rot) * 2 + Math.cos(SEM6.rot) * 14; substation({ x: sx, z: sz });
+function sem6(p, rot) {      // SEM 6 como la real: sala eléctrica naranja sobre remolque (transformador con aletas y baranda adelante, sala alta con equipos de clima, escalera atrás) + carro solar con mástil de comunicaciones + letrero
+  const g = new THREE.Group(), na = lam(0xe8701c), naO = lam(0xc75c12), dk = lam(0x2b2e33), gr = lam(0x9a9ea3), rj = lam(0xb8341c), ll = lam(0x1d1d1f), ac = lam(0xb9bcc0);
+  box(g, 14.2, 0.35, 3.0, naO, 0, 1.25, 0); for (const z of [-1.1, 1.1]) box(g, 14.0, 0.45, 0.3, dk, 0, 0.85, z);      // cubierta y vigas del remolque
+  for (const x of [-5.3, -4.0, 5.0]) for (const z of [-1.25, 1.25]) { cyl(g, 0.55, 0.55, 0.42, ll, x, 0.55, z * 1.08, Math.PI / 2); cyl(g, 0.3, 0.3, 0.44, ac, x, 0.55, z * 1.08, Math.PI / 2); }      // ruedas del remolque
+  box(g, 9.4, 3.0, 2.9, na, -2.3, 2.95, 0); box(g, 9.6, 0.15, 3.1, naO, -2.3, 4.5, 0);      // sala eléctrica
+  for (let x = -6.8; x <= 2.2; x += 0.6) for (const z of [-1.47, 1.47]) box(g, 0.08, 2.8, 0.04, naO, x, 2.95, z);      // costillas del contenedor
+  for (const x of [-3.2, -0.8]) { box(g, 1.1, 1.0, 0.4, ac, x, 3.0, 1.65); box(g, 0.9, 0.8, 0.05, dk, x, 3.0, 1.86); }      // equipos de clima al costado
+  box(g, 0.9, 2.1, 0.06, naO, -5.6, 2.55, 1.48); box(g, 0.9, 2.1, 0.06, naO, -5.6, 2.55, -1.48);      // puertas
+  for (const x of [-6.2, -4.6, -2.0, 0.8]) box(g, 0.5, 0.4, 0.25, rj, x, 1.75, -1.58);      // cajas de conexión de los cables
+  box(g, 4.0, 2.0, 2.4, na, 4.6, 2.45, 0);      // transformador
+  for (let x = 2.9; x <= 6.4; x += 0.22) for (const z of [-1.0, 1.0]) box(g, 0.07, 1.7, 0.6, naO, x, 2.4, z * 1.45);      // aletas del radiador
+  for (const x of [3.4, 4.6, 5.8]) cyl(g, 0.15, 0.15, 0.9, ac, x, 3.9, 0);      // bushings
+  for (const z of [-1.45, 1.45]) { for (let x = 2.6; x <= 7.0; x += 1.1) cyl(g, 0.04, 0.04, 1.1, na, x, 4.0, z); cyl(g, 0.04, 0.04, 4.4, na, 4.8, 4.55, z, Math.PI / 2); }      // baranda arriba del transformador
+  for (let k = 0; k < 5; k++) box(g, 0.32, 0.08, 1.2, na, -7.3 - k * 0.32, 1.2 - k * 0.26, 0.6);      // escalera atrás
+  cyl(g, 0.04, 0.04, 2.2, na, -7.9, 1.9, 1.2, 0.9); cyl(g, 0.04, 0.04, 2.2, na, -7.9, 1.9, 0.0, 0.9);      // pasamanos
+  g.position.set(p.x, M.H(p.x, p.z), p.z); g.rotation.y = -rot; M.scene.add(g); M.OBST.push({ x: p.x, z: p.z, r: 8 });
+  {      // carro solar de comunicaciones: remolque chico con 6 paneles inclinados, gabinete de baterías y mástil con antenas y baliza
+    const c = new THREE.Group(), pan = lam(0x3c4a63), mar = lam(0xd5d7da), mst = lam(0xb0b3b7);
+    box(c, 3.2, 0.25, 1.9, dk, 0, 0.75, 0); for (const z of [-1.05, 1.05]) cyl(c, 0.4, 0.4, 0.25, ll, 0.4, 0.4, z, Math.PI / 2); box(c, 1.4, 0.12, 0.15, dk, 2.2, 0.7, 0);      // chasis, ruedas y lanza
+    const arr = new THREE.Group(); arr.position.set(0, 1.6, 0); arr.rotation.z = 0.6; c.add(arr);      // arreglo de paneles inclinado ~35°
+    box(arr, 3.5, 0.06, 2.3, mar, 0, 0, 0); for (let i = 0; i < 2; i++) for (let j = 0; j < 3; j++) box(arr, 1.6, 0.05, 0.68, pan, (i - 0.5) * 1.68, 0.05, (j - 1) * 0.74);
+    cyl(c, 0.05, 0.05, 1.2, mst, 0.9, 1.0, 0); box(c, 0.6, 1.0, 0.5, mar, -1.2, 1.4, 0.55);      // soporte y gabinete de baterías
+    cyl(c, 0.09, 0.07, 8.0, mst, -1.2, 4.9, -0.5);      // mástil
+    for (const y of [7.6, 8.4]) box(c, 0.08, 0.08, 1.6, mst, -1.2, y, -0.5);      // crucetas
+    for (const [z, y] of [[-1.2, 7.9], [0.2, 7.9], [-1.0, 8.7], [0.0, 8.7]]) box(c, 0.14, 0.7, 0.3, mar, -1.2, y, z);      // antenas de panel
+    for (const z of [-1.3, 0.3]) cyl(c, 0.03, 0.03, 1.2, mst, -1.2, 9.1, z);      // antenas de varilla
+    cyl(c, 0.12, 0.12, 0.25, bas(0xff2a1a), -1.2, 9.05, -0.5);      // baliza
+    const cx = p.x + Math.cos(rot) * 6 - Math.sin(rot) * 10, cz = p.z + Math.sin(rot) * 6 + Math.cos(rot) * 10;
+    c.position.set(cx, M.H(cx, cz), cz); c.rotation.y = -rot + 0.4; M.scene.add(c); M.OBST.push({ x: cx, z: cz, r: 3 }); }
   const s = new THREE.Group(), post = lam(0x5a5a5a); cyl(s, 0.08, 0.08, 3.2, post, -1.2, 1.6, 0); cyl(s, 0.08, 0.08, 3.2, post, 1.2, 1.6, 0);
   const cv = document.createElement('canvas'); cv.width = 256; cv.height = 96; const c = cv.getContext('2d'); c.fillStyle = '#f4f1e8'; c.fillRect(0, 0, 256, 96); c.fillStyle = '#1e3a73'; c.font = 'bold 54px sans-serif'; c.textAlign = 'center'; c.fillText('SEM 6', 128, 66);
-  const tx = new THREE.CanvasTexture(cv); const pl = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.2, 0.08), [lam(0xdddddd), lam(0xdddddd), lam(0xdddddd), lam(0xdddddd), new THREE.MeshLambertMaterial({ map: tx }), lam(0xdddddd)]); pl.position.set(0, 2.7, 0); s.add(pl);
-  const lx = SEM6.x + Math.sin(SEM6.rot) * 20, lz = SEM6.z - Math.cos(SEM6.rot) * 20; s.position.set(lx, M.H(lx, lz), lz); s.rotation.y = -SEM6.rot; M.scene.add(s);
+  const tx = new THREE.CanvasTexture(cv); const pm = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.2, 0.08), [lam(0xdddddd), lam(0xdddddd), lam(0xdddddd), lam(0xdddddd), new THREE.MeshLambertMaterial({ map: tx }), lam(0xdddddd)]); pm.position.set(0, 2.7, 0); s.add(pm);
+  const lx = p.x + Math.sin(rot) * 20, lz = p.z - Math.cos(rot) * 20; s.position.set(lx, M.H(lx, lz), lz); s.rotation.y = -rot; M.scene.add(s);
 }
 function substation(p) {      // subestación móvil en la superficie, de donde sale el cable
   const g = new THREE.Group(), gr = lam(0x8d9196), dk = lam(0x2b2e33), ye = lam(0xe8b80c);
@@ -42,15 +59,20 @@ function substation(p) {      // subestación móvil en la superficie, de donde 
   for (const sx of [-1.6, 0, 1.6]) cyl(g, 0.18, 0.18, 1.0, lam(0xdedede), sx, 4.0, 0);
   g.position.set(p.x, M.H(p.x, p.z), p.z); g.rotation.y = hash(p.x, p.z) * 6.28; M.scene.add(g); M.OBST.push({ x: p.x, z: p.z, r: 4 });
 }
-function layCable(P, out, info) {      // tiende el cable sobre P: por el suelo (no se pisa: obstáculo) y, donde cruza un camino, por arriba entre dos postes
+function layCable(P, out, info, libre) {      // tiende el cable sobre P: por el suelo donde no circula nadie (caras, bermas y el piso junto a la pala; es obstáculo) y por arriba, entre un par de postes pasacables, donde lo cruzan equipos (ruta, caminos interiores y huellas de camiones), con postes intermedios cada ≤ 55 m
+  const cruza = p => onRoadC(p.x, p.z) || OPS.HUELLAS.some(h => (h.x - p.x) ** 2 + (h.z - p.z) ** 2 < 64);      // un camino, o una huella de camiones en un piso: ahí va el par de postes pasacables
+  const F = P.map(p => cruza(p) && !(libre && Math.hypot(p.x - libre.x, p.z - libre.z) < libre.r));      // libre: zona sin postes (explanada de la SEM 6: el cable va por el suelo)
+  { let k = 0; while (k < F.length) { if (F[k]) { k++; continue; } let j = k, L = 0; while (j < F.length && !F[j]) { if (j > k) L += Math.hypot(P[j].x - P[j - 1].x, P[j].z - P[j - 1].z); j++; } if (k > 0 && j < F.length && L < 45) for (let q = k; q < j; q++) F[q] = true; k = j; } }      // cruces seguidos (huellas y caminos a < 45 m uno de otro): un solo tramo por arriba, no un par de postes por cada uno
   let i = 0, n = 0;
   while (i < P.length) {
     const p = P[i];
-    if (!onRoadC(p.x, p.z)) { out.push(new THREE.Vector3(p.x, M.H(p.x, p.z) + 0.35, p.z)); if (n++ % 2 === 0) M.OBST.push({ x: p.x, z: p.z, r: 1.2 }); info.ground.push(p); i++; continue; }
-    let j = i; while (j < P.length && onRoadC(P[j].x, P[j].z)) j++;
-    const a = j - 1 > i ? P[i] : P[Math.max(0, i - 1)], b = j - 1 > i ? P[j - 1] : P[Math.min(P.length - 1, j)];      // postes en el camino, justo en cada orilla
-    cablePost(a.x, a.z, b.x - a.x, b.z - a.z); cablePost(b.x, b.z, b.x - a.x, b.z - a.z); info.posts.push(a, b);
-    out.push(new THREE.Vector3(a.x, M.H(a.x, a.z) + 0.6, a.z), new THREE.Vector3(a.x, M.H(a.x, a.z) + CTOP, a.z)); cableSpan(out, a, b, 12); out.push(new THREE.Vector3(b.x, M.H(b.x, b.z) + 0.6, b.z));
+    if (!F[i]) { out.push(new THREE.Vector3(p.x, M.H(p.x, p.z) + 0.35, p.z)); if (n++ % 2 === 0) M.OBST.push({ x: p.x, z: p.z, r: 1.2 }); info.ground.push(p); i++; continue; }
+    let j = i; while (j < P.length && F[j]) j++;
+    const a = j - 1 > i ? P[i] : P[Math.max(0, i - 1)], b = j - 1 > i ? P[j - 1] : P[Math.min(P.length - 1, j)];      // postes justo en cada orilla del tramo
+    const seg = [a]; let acc = 0; for (let k = i + 1; k < j - 1; k++) { acc += Math.hypot(P[k].x - P[k - 1].x, P[k].z - P[k - 1].z); if (acc >= 55 && Math.hypot(b.x - P[k].x, b.z - P[k].z) > 20) { seg.push(P[k]); acc = 0; } } seg.push(b);
+    out.push(new THREE.Vector3(a.x, M.H(a.x, a.z) + 0.6, a.z), new THREE.Vector3(a.x, M.H(a.x, a.z) + CTOP, a.z));
+    for (let k = 0; k < seg.length - 1; k++) { const s = seg[k], e = seg[k + 1]; cablePost(s.x, s.z, e.x - s.x, e.z - s.z); cablePost(e.x, e.z, e.x - s.x, e.z - s.z); info.posts.push(s, e); cableSpan(out, s, e, 12); }
+    out.push(new THREE.Vector3(b.x, M.H(b.x, b.z) + 0.6, b.z));
     i = j;
   }
 }
@@ -62,58 +84,59 @@ function groundCable(out, way, S, info) {      // último tramo por el piso junt
   const curve = new THREE.CatmullRomCurve3(out); curve.curveType = 'centripetal';
   M.scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, Math.min(6000, out.length * 3), 0.16, 6, false), lam(0x1a1a1a)));
 }
-const rimPoint = S => {      // punto en la superficie, afuera del borde del rajo, en la dirección de S desde el centro (para la subestación)
-  let dx = S.x - M.PITC.x, dz = S.z - M.PITC.z; const n = Math.hypot(dx, dz) || 1; dx /= n; dz /= n; let r = n; while (inPoly(M.PITC.x + dx * r, M.PITC.z + dz * r, RIMPOLY) && r < 2000) r += 4;
-  for (let k = 0; k < 20; k++) { const p = { x: M.PITC.x + dx * (r + 14 + k * 4), z: M.PITC.z + dz * (r + 14 + k * 4) }; if (!onRoadC(p.x, p.z) && !M.OBST.some(o => Math.hypot(o.x - p.x, o.z - p.z) < o.r + 6)) return p; }
-  return { x: M.PITC.x + dx * (r + 14), z: M.PITC.z + dz * (r + 14) };
+const rimPoint = S => {      // punto plano en la superficie, afuera del borde del rajo, en la dirección de S desde el centro (para la subestación)
+  let dx = S.x - M.PITC.x, dz = S.z - M.PITC.z; const n = Math.hypot(dx, dz) || 1; dx /= n; dz /= n;
+  let r0 = 0;
+  for (let r = n; r < 2600; r += 6) {
+    const p = { x: M.PITC.x + dx * r, z: M.PITC.z + dz * r }, h = M.H(p.x, p.z);
+    if (M.inPit(p.x, p.z)) continue;      // todavía dentro del rajo
+    if (!r0) r0 = r;
+    if (r - r0 < 30) continue;      // 30 m más allá del borde
+    const flat = Math.abs(M.H(p.x + dx * 10, p.z + dz * 10) - h) < 2.5 && Math.abs(M.H(p.x - dz * 10, p.z + dx * 10) - h) < 2.5;
+    if ((flat || r - r0 > 150) && !onRoadC(p.x, p.z) && !M.OBST.some(o => Math.hypot(o.x - p.x, o.z - p.z) < o.r + 6)) return p;      // lo más plano que haya cerca del borde
+  }
+  return { x: M.PITC.x + dx * (r0 || n), z: M.PITC.z + dz * (r0 || n) };
 };
-function buildPowerLine() {      // cable de la pala 3: de la subestación, por el suelo, hasta el poste del portón; cruza por arriba la entrada a la Rampa Sur y sigue por el pie del frente hasta un costado de la pala
+function buildPowerLine() {      // cable de la pala 2 (fase 7): de SEM 6 y su subestación en la superficie, por la pared, al portón de la rampa (cruza por arriba la entrada), y por el pie de la pared hasta la pala
+  const Q = OPS.PALAS.find(p => p.cable === 'ruta'); if (!Q) return;
   const info = { ground: [], posts: [] };
   // portón: dos postes pasacables a 42 m (pasan dos CAEX a la vez, uno entrando y otro saliendo); el cable cruza por arriba a 18 m
   const gc = 48, gw = 21, G1 = pl(gc + gw, 30), G2 = pl(gc - gw, 30);
   M.GATE = { s0: M.PLAT.se + gc - gw, s1: M.PLAT.se + gc + gw, d: WR + 15.5, p: [G1, G2] };
-  const avoid = [];      // por donde circulan: la entrada del portón, los camiones de la pala 3 y el piso de la fase 7 entre la partida y el portón
+  const avoid = [];      // por donde circulan: la entrada del portón y las salidas de los camiones de la pala
   for (let al = gc - gw + 3; al <= gc + gw - 3; al += 4) for (let la = 0; la <= 34; la += 6) { const q = pl(al, la); avoid.push({ x: q.x, z: q.z, r: 6 }); }
-  for (const sp of SPOT_AL) for (let al = sp - 60; al <= sp + 70; al += 5) { const q = pl(al, sp - al > 0 ? ARR_LA + (SPOT_LA - ARR_LA) * sm01(1 - (sp - al) / 30) : SPOT_LA - (al - sp) * 0.35); avoid.push({ x: q.x, z: q.z, r: 9 }); }
-  const A = rimPoint(G1); substation(A);
-  const out = [new THREE.Vector3(A.x, M.H(A.x, A.z) + 1.2, A.z)];
-  layCable(cableRoute(A, pl(gc + gw + 3, 26), avoid), out, info);
+  for (const o of M.OBST.filter(o => o.r === 8 && Math.hypot(o.x - Q.x, o.z - Q.z) < 40)) for (let t = 12; t <= 110; t += 12) avoid.push({ x: o.x - Q.fx * t, z: o.z - Q.fz * t, r: 10 });
+  const B = rimPoint(G1); substation(B);      // subestación móvil en la superficie, sobre la fase 7
+  const out = [new THREE.Vector3(B.x, M.H(B.x, B.z) + 1.2, B.z)];
+  layCable(cableRoute(B, pl(gc + gw + 3, 26), avoid), out, info);
   out.push(new THREE.Vector3(G1.x, M.H(G1.x, G1.z) + 0.6, G1.z), new THREE.Vector3(G1.x, M.H(G1.x, G1.z) + CTOP, G1.z));
   cablePost(G1.x, G1.z, G2.x - G1.x, G2.z - G1.z); cablePost(G2.x, G2.z, G2.x - G1.x, G2.z - G1.z); info.posts.push(G1, G2);
   cableSpan(out, G1, G2, 14);
   out.push(new THREE.Vector3(G2.x, M.H(G2.x, G2.z) + 0.6, G2.z));      // baja por el poste del lado de la pala
-  { const Q = M.F7EQ.pc, back = { x: Q.x - Q.fx * 20, z: Q.z - Q.fz * 20 }, G3 = pl(gc - gw - 12, 32);      // baja del poste y se aleja del portón antes de seguir a la pala
-    const seg = []; for (let t = 0.1; t < 1; t += 0.1) seg.push({ x: G2.x + (G3.x - G2.x) * t, z: G2.z + (G3.z - G2.z) * t });
-    const r5 = D52.cab.p5, i1 = r5.findIndex(p => p[2] === 1 && p[1] > 420); let i2 = i1; while (r5[i2 + 1][2] === 1) i2++;      // cruce de la celeste compartido con el cable de la pala 5: mismo par de postes
-    const S1 = { x: r5[i2 + 1][0], z: r5[i2 + 1][1] }, S2 = { x: r5[i1 - 1][0], z: r5[i1 - 1][1] };
-    layCable(seg.concat(cableRoute(G3, S1, avoid)), out, info);
-    cablePost(S1.x, S1.z, S2.x - S1.x, S2.z - S1.z); cablePost(S2.x, S2.z, S2.x - S1.x, S2.z - S1.z); info.posts.push(S1, S2);
-    out.push(new THREE.Vector3(S1.x, M.H(S1.x, S1.z) + 0.6, S1.z), new THREE.Vector3(S1.x, M.H(S1.x, S1.z) + CTOP, S1.z)); cableSpan(out, S1, S2, 14); out.push(new THREE.Vector3(S2.x, M.H(S2.x, S2.z) + 0.6, S2.z));
-    layCable(cableRoute(S2, back, avoid), out, info); groundCable(out, [back, { x: Q.x - Q.fx * 12, z: Q.z - Q.fz * 12 }, { x: Q.x - Q.fx * 7 + Q.fz * 2, z: Q.z - Q.fz * 7 - Q.fx * 2 }], { x: Q.x, z: Q.z }, info); }
-  CABLES.CABLE = Object.assign(info, { src: A });
+  const back = { x: Q.x - Q.fx * 20, z: Q.z - Q.fz * 20 }, G3 = pl(gc - gw - 12, 32);      // se aleja del portón antes de seguir a la pala
+  const seg = []; for (let t = 0.1; t < 1; t += 0.1) seg.push({ x: G2.x + (G3.x - G2.x) * t, z: G2.z + (G3.z - G2.z) * t });
+  layCable(seg.concat(cableRoute(G3, back, avoid)), out, info);
+  groundCable(out, [back, { x: Q.x - Q.fx * 12, z: Q.z - Q.fz * 12 }, { x: Q.x - Q.fx * 7 + Q.fz * 2, z: Q.z - Q.fz * 7 - Q.fx * 2 }], { x: Q.x, z: Q.z }, info);
+  CABLES.CABLE = Object.assign(info, { src: B });
 }
-function drawnCable(W, Q, local) {      // local: la subestación móvil va en el primer punto dibujado (dentro del rajo), no en el borde      // cable dibujado: de la subestación en el borde, por el suelo; en los pasacables (y donde cruza un camino) sube a dos postes y pasa por arriba
-  const info = { ground: [], posts: [] }, P = W.map(p => ({ x: p[0], z: p[1], g: p[2] })).reverse();
-  const lanes = M.OBST.filter(o => o.r === 8 && Math.hypot(o.x - Q.x, o.z - Q.z) < 40), inLane = p => lanes.some(o => { const t = -(p.x - o.x) * Q.fx - (p.z - o.z) * Q.fz, w = Math.abs(-(p.x - o.x) * Q.fz + (p.z - o.z) * Q.fx); return t > -6 && t < 120 && w < 10; });      // salida de los camiones: desde cada puesto de carga, hacia adelante (se alejan de la pila), 20 m de ancho
-  { const e = { x: Q.x - Q.fx * 9, z: Q.z - Q.fz * 9 }, a = P[P.length - 1], L = Math.hypot(e.x - a.x, e.z - a.z), m = Math.ceil(L / 2); for (let i = 1; i < m - 1; i++) P.push({ x: a.x + (e.x - a.x) * i / m, z: a.z + (e.z - a.z) * i / m, g: 0 }); }      // el último tramo hasta la pala también puede cruzar una salida
-  P.forEach(p => { if (onRoadC(p.x, p.z) || inLane(p)) p.g = 1; });
-  for (let k = 1; k < P.length - 1; k++) if (!P[k].g && P[k - 1].g && (P[k + 1].g || (P[k + 2] && P[k + 2].g))) P[k].g = 1;      // dos tramos elevados casi seguidos se juntan en uno      // donde cruza un camino o una salida de camiones, el cable va por arriba entre dos postes
-  const A = local ? { x: P[0].x, z: P[0].z } : rimPoint(P[0]); substation(A);
-  const out = [new THREE.Vector3(A.x, M.H(A.x, A.z) + 1.2, A.z)]; if (!local) layCable(cableRoute(A, P[0], []), out, info);
-  const last = P.length - 1; let k = 0;
-  while (k < last) {
-    if (P[k + 1].g) { let j = k + 1; while (j < last && P[j].g) j++; const a = P[k], b = P[j];
-      cablePost(a.x, a.z, b.x - a.x, b.z - a.z); cablePost(b.x, b.z, b.x - a.x, b.z - a.z); info.posts.push(a, b);
-      out.push(new THREE.Vector3(a.x, M.H(a.x, a.z) + 0.6, a.z), new THREE.Vector3(a.x, M.H(a.x, a.z) + CTOP, a.z)); cableSpan(out, a, b, 14); out.push(new THREE.Vector3(b.x, M.H(b.x, b.z) + 0.6, b.z)); k = j; continue; }
-    const a = P[k], b = P[k + 1], m = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 2));
-    for (let i = 1; i <= m; i++) { const p = { x: a.x + (b.x - a.x) * i / m, z: a.z + (b.z - a.z) * i / m }; out.push(new THREE.Vector3(p.x, M.H(p.x, p.z) + 0.3, p.z)); if (i % 2 === 0) M.OBST.push({ x: p.x, z: p.z, r: 1.2 }); info.ground.push(p); }
-    k++;
+function buildCable2() {      // palas del fondo: SEM 6 junto a la tercera curva del camino que baja al fondo (SEM6_DWG) y, de su subestación, un cable por la pared hasta un costado de cada pala
+  let S6 = null, sala = null;
+  if (SEM6_DWG) { const A = { x: SEM6_DWG.x, z: SEM6_DWG.z }, rot = SEM6_DWG.rot, c = Math.cos(rot), sn = Math.sin(rot); sem6(A, rot); S6 = A;      // la SEM 6 es la subestación: los cables salen del mismo remolque
+    sala = { A, w: (lx, lz) => ({ x: A.x + lx * c - lz * sn, z: A.z + lx * sn + lz * c }) }; }      // w: punto en coordenadas de la sala (x a lo largo, z a lo ancho)
+  for (const Q of OPS.PALAS.filter(p => p.cable === 'fondo')) {
+    const info = { ground: [], posts: [] }, avoid = [];
+    for (const o of M.OBST.filter(o => o.r === 8 && Math.hypot(o.x - Q.x, o.z - Q.z) < 40)) for (let t = 12; t <= 110; t += 12) avoid.push({ x: o.x - Q.fx * t, z: o.z - Q.fz * t, r: 10 });
+    const A = S6 || rimPoint(Q); if (!S6) substation(A);
+    const out = [new THREE.Vector3(A.x, M.H(A.x, A.z) + 1.2, A.z)], back = { x: Q.x - Q.fx * 18 + Q.fz * 6, z: Q.z - Q.fz * 18 - Q.fx * 6 };
+    let ini = A, libre = null;
+    if (sala) {      // el cable sale del extremo del remolque de la SEM 6 que mira a la pala; en la explanada no hay postes
+      const ends = [sala.w(7.6, 0), sala.w(-8.6, 0.9)], e2 = ends.sort((a, b) => Math.hypot(a.x - back.x, a.z - back.z) - Math.hypot(b.x - back.x, b.z - back.z))[0];
+      out.length = 0; out.push(new THREE.Vector3(e2.x, M.H(e2.x, e2.z) + 1.4, e2.z), new THREE.Vector3(e2.x, M.H(e2.x, e2.z) + 0.3, e2.z));      // sale del extremo del remolque, por el suelo
+      ini = e2; libre = { x: sala.A.x, z: sala.A.z, r: 35 }; }
+    layCable(cableRoute(ini, back, avoid), out, info, libre);
+    groundCable(out, [back, { x: Q.x - Q.fx * 9, z: Q.z - Q.fz * 9 }], { x: Q.x, z: Q.z }, info);
+    if (!CABLES.CABLE2) CABLES.CABLE2 = Object.assign(info, { src: A });
   }
-  groundCable(out, [P[last], { x: Q.x - Q.fx * 9, z: Q.z - Q.fz * 9 }], { x: Q.x, z: Q.z }, info);
-  return Object.assign(info, { src: A });
-}
-function buildCable2() {      // palas 2, 3 y 6 de la fase 7 y pala 5 del fondo: cables como en el dibujo
-  for (const [k, Q] of [['p2', M.F7EQ.palas[0]], ['p3', M.F7EQ.palas[1]], ['p6', M.F7EQ.palas[2]], ['p5', M.PIT.p5]]) { if (!Q) continue; const info = drawnCable(D52.cab[k], Q); if (!CABLES.CABLE2) CABLES.CABLE2 = info; }
 }
 
-export { CABLES, buildSem6, buildPowerLine, buildCable2 };      // lo demás es interno; CABLES se expone para el arnés de pruebas
+export { CABLES, buildPowerLine, buildCable2 };      // lo demás es interno; CABLES se expone para el arnés de pruebas

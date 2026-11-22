@@ -1,29 +1,123 @@
 // Camiones: camioneta doble cabina, chasis común (truckBase), CAEX de 300 t (buildTruck) y aljibe tipo HD785 (buildAljibe), con sus prototipos y placas.
-import { GRILLE_MAT, TIRE_MATS, bas, blob, box, brakeGlowMat, brakeMat, cyl, grimeTex, lam, rimMats, rockGeo } from './materiales.js';
+import { GRILLE_MAT, TIRE_MATS, bas, blob, box, brakeGlowMat, brakeMat, cyl, finePile, grimeTex, lam, rimMats, rockGeo } from './materiales.js';
 import { hash } from '../comun/mates.js';
 
-function buildPickup(bodyC, other) {
-  const g = new THREE.Group();
-  const red = lam(bodyC || 0xc9141c), dark = lam(0x18191b), glass = lam(0x1b2733), chrome = lam(0xb9bec4), orange = new THREE.MeshBasicMaterial({ color: 0xff6a00, side: THREE.DoubleSide });
-  box(g, 2.0, 0.7, 5.0, red, 0, 0.95, 0);
-  box(g, 1.9, 0.95, 2.7, red, 0, 1.775, 0.1);
-  box(g, 1.94, 0.45, 2.45, glass, 0, 1.85, 0.1); box(g, 1.96, 0.47, 0.12, red, 0, 1.85, 0.1);
-  box(g, 1.9, 0.14, 2.7, red, 0, 2.3, 0.1);
-  box(g, 0.1, 0.5, 1.15, red, 0.95, 1.55, -1.875); box(g, 0.1, 0.5, 1.15, red, -0.95, 1.55, -1.875);
-  box(g, 1.9, 0.5, 0.1, red, 0, 1.55, -2.45);
-  box(g, 1.8, 0.04, 1.15, dark, 0, 1.31, -1.875);
-  box(g, 2.06, 0.3, 0.25, dark, 0, 0.6, 2.55); box(g, 2.06, 0.3, 0.25, dark, 0, 0.6, -2.55);
-  box(g, 1.5, 0.3, 0.05, dark, 0, 1.0, 2.51);
-  for (const x of [-0.7, 0.7]) { box(g, 0.4, 0.2, 0.05, bas(0xfff3c4), x, 1.1, 2.52); box(g, 0.4, 0.2, 0.05, other ? bas(0x7a1010) : brakeMat, x, 1.1, -2.52); if (!other) { const gl = new THREE.Sprite(brakeGlowMat.clone()); gl.scale.set(1.7, 1.7, 1); gl.position.set(x, 1.1, -2.65); gl.name = 'brakeGlow'; g.add(gl); } }
-  for (const x of [-1.0, 1.0]) for (const z of [-1.6, 1.6]) { cyl(g, 0.45, 0.45, 0.32, lam(0x0f0f10), x, 0.45, z, Math.PI / 2); cyl(g, 0.24, 0.24, 0.34, chrome, x, 0.45, z, Math.PI / 2); }
-  cyl(g, 0.27, 0.27, 0.1, dark, 0, 2.42, 0.1);
-  const b = cyl(g, 0.21, 0.21, 0.3, new THREE.MeshBasicMaterial({ color: other ? 0xffb000 : 0x3d8bff }), 0, 2.62, 0.1); b.name = 'beacon';
-  // Pértiga: soporte en la tolva, mástil rayado naranja/blanco, bandera y remate
-  box(g, 0.22, 0.34, 0.22, dark, 0.88, 1.47, -2.3);
-  const pm = [new THREE.MeshBasicMaterial({ color: 0xff6a00 }), new THREE.MeshBasicMaterial({ color: 0xffffff })];
-  for (let i = 0; i < 3; i++) cyl(g, 0.06, 0.06, 1.2, pm[i % 2], 0.88, 2.5 + i * 1.2, -2.3);
-  cyl(g, 0.11, 0.11, 0.1, pm[0], 0.88, 5.55, -2.3);
-  const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.62), orange); flag.position.set(0.88 + 0.5, 5.15, -2.3); g.add(flag);
+function extrude(g, shape, ancho, bisel, mat, x0) {      // silueta lateral (x de la figura = largo del vehículo, y = alto) extruida a lo ancho, con bisel; x0 = centro en x
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.001, ancho - 2 * bisel), bevelEnabled: bisel > 0, bevelThickness: bisel, bevelSize: bisel, bevelSegments: 2, curveSegments: 16 });
+  geo.translate(0, 0, -(ancho - 2 * bisel) / 2); geo.rotateY(-Math.PI / 2); geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, mat); m.position.x = x0 || 0; g.add(m); return m;
+}
+const decalTex = (txt, w, h, font, color, bg) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); if (bg) { x.fillStyle = bg; x.fillRect(0, 0, w, h); } x.fillStyle = color; x.font = font; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(txt, w / 2, h / 2 + 1); return new THREE.CanvasTexture(c); };
+const TIRE_PROF = [[0.2, 0.15], [0.27, 0.16], [0.34, 0.165], [0.385, 0.135], [0.4, 0.1], [0.4, -0.1], [0.385, -0.135], [0.34, -0.165], [0.27, -0.16], [0.2, -0.15]];      // neumático torneado: hombros redondos
+const RIM_PROF = [[0.0, 0.17], [0.09, 0.17], [0.11, 0.1], [0.21, 0.1], [0.235, 0.15], [0.26, 0.15], [0.26, -0.15], [0.235, -0.15], [0.235, -0.04], [0.0, -0.04]];      // llanta de acero: plato hundido con centro saliente
+const tireGeo = new THREE.LatheGeometry(TIRE_PROF.map(([r, y]) => new THREE.Vector2(r, y)), 32), rimGeo = new THREE.LatheGeometry(RIM_PROF.map(([r, y]) => new THREE.Vector2(r, y)), 28);
+function loft(g, secs, mat) {      // superficie curva continua: une secciones transversales (cada una: z y un anillo de puntos [x, y]) y tapa los extremos; normales suaves
+  const n = secs[0].p.length, pos = [], idx = [];
+  for (const s of secs) for (const [x, y] of s.p) pos.push(x, y, s.z);
+  for (let k = 0; k < secs.length - 1; k++) for (let i = 0; i < n; i++) { const a = k * n + i, b = k * n + (i + 1) % n, c = a + n, d = b + n; idx.push(a, b, c, b, d, c); }
+  for (const [k, flip] of [[0, false], [secs.length - 1, true]]) { const c = pos.length / 3; let cx = 0, cy = 0; for (const [x, y] of secs[k].p) { cx += x / n; cy += y / n; } pos.push(cx, cy, secs[k].z);
+    for (let i = 0; i < n; i++) { const a = k * n + i, b = k * n + (i + 1) % n; if (flip) idx.push(c, a, b); else idx.push(c, b, a); } }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+  const uv = []; for (let i = 0; i < pos.length; i += 3) uv.push(pos[i + 2] * 0.35, pos[i + 1] * 0.6 + pos[i] * 0.2); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  const m = new THREE.Mesh(geo, mat); g.add(m); return m;
+}
+function secRedonda(wb, wt, y0, y1, rt, rb) {      // sección transversal: trapecio (ancho wb abajo, wt arriba) con esquinas redondeadas (rt arriba, rb abajo); 28 puntos, en sentido antihorario visto desde adelante
+  const p = [], K = 6, h = Math.max(1e-3, y1 - y0); rt = Math.min(rt, h / 2, wt); rb = Math.min(rb, h / 2, wb);
+  const arc = (cx, cy, r, a0) => { for (let k = 0; k <= K; k++) { const a = a0 + k * Math.PI / 2 / K; p.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); } };
+  arc(wb - rb, y0 + rb, rb, -Math.PI / 2); arc(wt - rt, y1 - rt, rt, 0); arc(-wt + rt, y1 - rt, rt, Math.PI / 2); arc(-wb + rb, y0 + rb, rb, Math.PI);
+  return p;
+}
+function quad(g, a, b, c, d, mat) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute([...a, ...b, ...c, ...d], 3)); geo.setIndex([0, 1, 2, 0, 2, 3]); geo.computeVertexNormals(); const m = new THREE.Mesh(geo, mat); g.add(m); return m; }
+function buildPickup(bodyC, other) {      // Toyota Hilux doble cabina 4×4 de faena a medidas reales (+z = adelante): 5,27 × 1,80 × 1,81 m, 3,09 m entre ejes, voladizo delantero 0,89 y trasero 1,29, cintura a 1,22 m, cabina de 2,2 m y tolva de 1,55 m
+  const g = new THREE.Group();          // roja, franja reflectante amarilla por la cintura y sobre el capó, parrilla cromada, focos envolventes, toma de aire, snorkel, barra antivuelco, llantas de aleación y baliza
+  const COL = bodyC === 0xc9141c || !bodyC ? 0x8c161c : bodyC;      // rojo burdeos de la Hilux de faena (foto de referencia)
+  const red = lam(COL, { side: THREE.DoubleSide }), redD = lam(0x6e1217), glass = new THREE.MeshPhongMaterial({ color: 0x18222c, shininess: 90, specular: 0x667788, side: THREE.DoubleSide }), dark = lam(0x121314), plast = lam(0x222325), chrome = lam(0xd2d6da), steel = lam(0x7d8186), tire = lam(0x1b1b1c), reflex = bas(0xd8f02a);
+  const orange = new THREE.MeshBasicMaterial({ color: 0xff6a00, side: THREE.DoubleSide });
+  const ZF = 1.62, ZR = -1.48, WR0 = 0.42, AR = 0.55, SILL = 0.47, BELT = 1.22, ROOF = 1.8, W = 0.9, Z0 = 2.5, Z1 = -2.72, ZC = -1.15;      // ejes, radio de rueda y de arco, zócalo, cintura, techo, semiancho, frente, cola y fin de la cabina
+  const AA = Math.asin((SILL - WR0) / AR), AZ = AR * Math.cos(AA), BV = 0.06;
+  { const s = new THREE.Shape();      // frente y cabina hasta la cintura: paso de rueda delantero, parachoques, frente casi vertical, capó corto y alto que sube al parabrisas
+    const aC = Math.atan2(Math.sqrt(AR * AR - (ZC - ZR) ** 2), ZC - ZR);      // el paso de la rueda trasera asoma por delante del fin de la cabina: la carrocería delantera también lo recorta
+    s.moveTo(ZC, WR0 + Math.sin(aC) * AR); s.absarc(ZR, WR0, AR, aC, AA, true); s.lineTo(ZF - AZ, SILL); s.absarc(ZF, WR0, AR, Math.PI - AA, AA, true); s.lineTo(Z0 - 0.22, SILL); s.quadraticCurveTo(Z0 - 0.06, SILL + 0.02, Z0 - 0.06, 0.58); s.lineTo(Z0 - 0.06, 0.94);
+    s.quadraticCurveTo(Z0 - 0.06, 1.05, Z0 - 0.24, 1.06); s.lineTo(1.1, 1.17); s.lineTo(1.02, BELT - BV); s.lineTo(ZC, BELT - BV); s.lineTo(ZC, WR0 + Math.sin(aC) * AR); extrude(g, s, 2 * W, BV, red); }
+  { const s = new THREE.Shape();      // costados de la tolva con el paso de rueda trasero
+    const zB = ZC - 0.02, aB = Math.atan2(Math.sqrt(AR * AR - (zB - ZR) ** 2), zB - ZR);      // el costado de la tolva termina en el arco (no vuelve por dentro: eso rellenaba el paso de rueda)
+    s.moveTo(Z1 + 0.06, SILL + 0.06); s.lineTo(ZR - AZ, SILL); s.absarc(ZR, WR0, AR, Math.PI - AA, aB, true); s.lineTo(zB, BELT); s.lineTo(Z1 + 0.06, BELT); s.lineTo(Z1 + 0.06, SILL + 0.06);
+    for (const sx of [-1, 1]) extrude(g, s, 0.1, 0.02, red, sx * (W - 0.05)); }
+  box(g, 2 * W - 0.1, BELT - 0.6, 0.07, red, 0, (BELT + 0.6) / 2, Z1 + 0.07);      // portalón
+  { const yb = WR0 + AR + 0.03; box(g, 2 * W - 0.1, BELT - yb, 0.07, red, 0, (BELT + yb) / 2, ZC - 0.06); }      // frente de la tolva: arranca sobre el arco de la rueda, no cae dentro del paso
+  box(g, 2 * W - 0.16, 0.05, ZC - Z1 - 0.1, dark, 0, 0.72, (ZC + Z1) / 2);      // piso de la tolva
+  for (const sx of [-1, 1]) box(g, 0.14, 0.04, ZC - Z1 - 0.08, plast, sx * (W - 0.05), BELT + 0.03, (ZC + Z1) / 2 + 0.02);      // protector negro del borde de la tolva
+  box(g, 1.2, 0.2, 4.6, dark, 0, 0.4, -0.1);      // chasis bajo el piso: más angosto que la trocha y fuera de los pasos de rueda
+  // cabina doble: más angosta arriba, parabrisas inclinado, techo levemente abombado, luneta casi vertical
+  const GB = W - 0.03, GT = 0.71, lado = y => GB + (GT - GB) * Math.min(1, Math.max(0, (y - BELT) / (ROOF - BELT)));
+  loft(g, [[1.04, BELT + 0.01, 0.01], [0.86, 1.42, 0.07], [0.64, 1.66, 0.1], [0.46, 1.77, 0.12], [0.22, ROOF, 0.13], [-0.8, ROOF, 0.13], [-1.02, 1.77, 0.12], [-1.1, 1.6, 0.09], [ZC + 0.02, BELT + 0.01, 0.01]]
+    .map(([z, y1, r]) => ({ z, p: secRedonda(GB, lado(y1), BELT - 0.05, y1, r, 0.02) })), red);
+  { const e = 0.014, x0 = lado(1.28) - 0.09, x1 = lado(1.7) - 0.1; quad(g, [-x0, 1.28, 0.975 + e], [x0, 1.28, 0.975 + e], [x1, 1.7, 0.6 + e], [-x1, 1.7, 0.6 + e], glass);      // parabrisas
+    quad(g, [x0, 1.3, ZC + 0.035 - e], [-x0, 1.3, ZC + 0.035 - e], [-x1, 1.64, -1.085 - e], [x1, 1.64, -1.085 - e], glass); }      // luneta
+  for (const sx of [-1, 1]) for (const [za, zb, zc, zd] of [[0.84, 0.11, 0.11, 0.5], [-0.01, -0.84, -0.7, -0.01]]) { const e = 0.01, ya = 1.28, yb = 1.7;      // vidrios de las dos puertas
+    quad(g, [sx * (lado(ya) + e), ya, za], [sx * (lado(ya) + e), ya, zb], [sx * (lado(yb) + e), yb, zc], [sx * (lado(yb) + e), yb, zd], glass); }
+  // líneas de carrocería: juntas de las puertas, pliegue lateral, manillas y espejos
+  for (const sx of [-1, 1]) { for (const z of [0.97, 0.05, -0.87]) box(g, 0.012, BELT - SILL - 0.1, 0.02, redD, sx * (W + 0.004), (SILL + BELT) / 2 + 0.02, z);
+    box(g, 0.012, 0.025, 2.2, redD, sx * (W + 0.004), 1.0, 0.0);      // pliegue lateral solo sobre las puertas (no cruza los pasos de rueda)
+    box(g, 0.012, 0.05, 0.75, plast, sx * (W + 0.004), SILL + 0.03, (ZF + ZR) / 2 + 0.05);      // zócalo negro solo entre las ruedas
+    box(g, 0.2, 0.22, 0.14, red, sx * (W + 0.14), 1.36, 0.86); box(g, 0.1, 0.05, 0.08, red, sx * (W + 0.03), 1.3, 0.88); }
+  // frente: parrilla cromada de 3 barras con emblema entre los focos envolventes; parachoques del color de la carrocería con toma inferior, neblineros y placa
+  const FZ = Z0 + 0.005;
+  box(g, 0.8, 0.32, 0.05, GRILLE_MAT, 0, 0.93, FZ); for (const y of [0.84, 0.92, 1.0]) box(g, 0.76, 0.025, 0.06, dark, 0, y, FZ + 0.005);      // parrilla negra solo entre los focos, con barras
+  box(g, 0.86, 0.04, 0.1, reflex, 0, 1.13, Z0 - 0.16).rotation.x = 0.06;      // cinta reflectante de foco a foco por el borde delantero del capó
+  for (const sx of [-1, 1]) { const hs = new THREE.Shape(); [[0.42, 0.85], [0.42, 1.0], [0.64, 1.055], [0.88, 1.04], [0.89, 0.93], [0.7, 0.86]].forEach(([x, y], i) => i ? hs.lineTo(sx * x, y) : hs.moveTo(sx * x, y));      // foco: lente transparente alargada que se afina hacia la esquina
+    const hg = new THREE.ExtrudeGeometry(hs, { depth: 0.12, bevelEnabled: true, bevelSize: 0.015, bevelThickness: 0.02, bevelSegments: 2 }); hg.translate(0, 0, Z0 - 0.14);
+    const hm = new THREE.Mesh(hg, bas(0xaebcc6)); hm.material.side = THREE.DoubleSide; g.add(hm);
+    box(g, 0.36, 0.1, 0.03, bas(0x39424a), sx * 0.66, 0.955, Z0 + 0.012); box(g, 0.3, 0.02, 0.03, bas(0xf4f4f0), sx * 0.69, 0.875, Z0 + 0.014);      // reflector interior y luz de día
+    const bulb = cyl(g, 0.055, 0.055, 0.02, bas(0xdfe6ea), sx * 0.58, 0.955, Z0 + 0.02); bulb.rotation.x = Math.PI / 2;
+  }
+  box(g, 2 * W + 0.04, 0.16, 0.2, plast, 0, SILL + 0.06, Z0 - 0.1);      // faldón negro del parachoques
+  box(g, 0.9, 0.17, 0.05, GRILLE_MAT, 0, 0.62, FZ); for (const sx of [-1, 1]) { box(g, 0.24, 0.12, 0.04, GRILLE_MAT, sx * 0.7, 0.6, FZ); const f = cyl(g, 0.045, 0.045, 0.03, bas(0xe9e4cf), sx * 0.7, 0.6, FZ + 0.02); f.rotation.x = Math.PI / 2; }
+  // atrás: parachoques de acero, portalón liso, focos verticales (luces de freno) y placa
+  box(g, 1.7, 0.14, 0.2, steel, 0, 0.52, Z1 - 0.02);
+  for (const sx of [-1, 1]) {
+    const LX = sx * (W - 0.14);      // farol trasero Hilux: carcasa roja alta con tres secciones: freno (rojo), intermitente (ámbar) y retroceso (blanco)
+    box(g, 0.21, 0.5, 0.05, other ? bas(0x6a0d10) : lam(0x9a1218), LX, 0.935, Z1 + 0.02);
+    box(g, 0.17, 0.2, 0.03, other ? bas(0x7a1010) : brakeMat, LX, 1.06, Z1 + 0.0); box(g, 0.17, 0.12, 0.03, bas(0xff9a1a), LX, 0.89, Z1 + 0.0); box(g, 0.17, 0.12, 0.03, bas(0xe8eef0), LX, 0.77, Z1 + 0.0);
+    if (!other) { const gl = new THREE.Sprite(brakeGlowMat.clone()); gl.scale.set(1.5, 1.5, 1); gl.position.set(LX, 1.06, Z1 - 0.1); gl.name = 'brakeGlow'; g.add(gl); }
+  }
+  // franja reflectante amarilla: por ambos costados a la altura de las manillas (del foco al portalón) y cruzando el capó
+  for (const sx of [-1, 1]) { box(g, 0.02, 0.05, 3.615, reflex, sx * (W + 0.006), BELT - 0.08, -0.7575); box(g, 0.02, 0.05, 1.354, reflex, sx * (W + 0.006), 1.09, 1.725).rotation.x = 0.0739; }      // tramo recto hasta el fin de la puerta y tramo inclinado que baja con el capó hasta la punta alta del foco      // cinta reflectante fina, al borde alto de las puertas, el capó y la tolva
+  // ruedas dentro de sus pasos (trocha 1,54 m): neumático torneado 265/65 R17, llanta de acero roja con centro gris y 6 tuercas
+  { const liner = lam(0x0d0e0f, { side: THREE.DoubleSide });      // revestimiento negro del paso de rueda: tapa el túnel rojo que deja el recorte de la carrocería
+    for (const z of [ZF, ZR]) { const s = new THREE.Shape(); s.absarc(z, WR0, AR + 0.01, Math.PI - AA, AA, true); s.absarc(z, WR0, AR - 0.11, AA, Math.PI - AA, false); extrude(g, s, 2 * (W + 0.07), 0, liner, 0); } }      // cubre también el borde biselado de la carrocería
+  const wg = new THREE.Group(); g.add(wg);      // ruedas: grupo aparte, no sube con la carrocería (la camioneta va más alta)
+  for (const z of [ZF, ZR]) for (const sx of [-1, 1]) { const X = sx * 0.76;
+    const tr = new THREE.Mesh(tireGeo, tire); tr.rotation.z = Math.PI / 2; tr.scale.set(1.05, 0.85, 1.05); tr.position.set(X, WR0, z); wg.add(tr);
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(AR + 0.01, 0.035, 6, 22, Math.PI), plast); lip.rotation.y = Math.PI / 2; lip.position.set(sx * (W + 0.005), SILL, z); lip.scale.y = (WR0 + AR - SILL) / (AR + 0.01); g.add(lip);      // labio negro del paso de rueda
+    const rm = new THREE.Mesh(rimGeo, lam(0x5b5f64)); rm.rotation.z = -sx * Math.PI / 2; rm.scale.set(0.8, 0.85, 0.8); rm.position.set(X, WR0, z); wg.add(rm);      // aro de aleación gris oscuro
+    const XF = X + sx * 0.1;      // cara de la llanta
+    cyl(wg, 0.05, 0.05, 0.06, lam(0x24262a), XF, WR0, z, Math.PI / 2);      // tapa central
+    for (let k = 0; k < 5; k++) { const a = k * Math.PI * 2 / 5 + 0.3; const sp = box(wg, 0.035, 0.17, 0.055, lam(0x80858b), XF, WR0 + Math.cos(a) * 0.115, z + Math.sin(a) * 0.115); sp.rotation.x = a;      // 5 rayos
+      cyl(wg, 0.014, 0.014, 0.05, bas(0xd8e02a), XF + sx * 0.01, WR0 + Math.cos(a + 0.62) * 0.07, z + Math.sin(a + 0.62) * 0.07, Math.PI / 2); }      // tuercas con indicador amarillo
+  }
+  // rack negro tras la cabina (protector de luneta): dos montantes hasta el techo, travesaños, tirantes inclinados hacia la tolva
+  { const RZ = ZC - 0.16, RH = ROOF + 0.06 - BELT;
+    for (const sx of [-1, 1]) { cyl(g, 0.04, 0.04, RH, plast, sx * 0.74, BELT + RH / 2, RZ); const br = cyl(g, 0.035, 0.035, 0.95, plast, sx * 0.74, BELT + 0.31, RZ - 0.36); br.rotation.x = 0.86; }
+    for (const y of [BELT + RH, BELT + RH * 0.62, BELT + RH * 0.3]) cyl(g, 0.035, 0.035, 1.48, plast, 0, y, RZ, Math.PI / 2);
+    for (const x of [-0.37, 0, 0.37]) cyl(g, 0.02, 0.02, RH * 0.7, plast, x, BELT + RH * 0.65, RZ);
+  }
+  box(g, 0.14, 0.04, 0.14, dark, 0.74, ROOF + 0.08, ZC - 0.16);      // base de la baliza, sobre el montante del antivuelco del lado del conductor (izquierda)
+  { const PX = -0.82, PZ = ZC - 0.42, PH = 2.9, SPH = 0.17;      // pértiga de seguridad de 10 pies (3,05 m con banderín): resorte cromado en la base y látigo con espiral blanco y negro que se inclina (grupo 'pertiga', lo anima updateVisuals)
+    const crom = new THREE.MeshPhongMaterial({ color: 0xdfe3e6, shininess: 120, specular: 0xffffff });
+    cyl(g, 0.055, 0.055, 0.04, dark, PX, BELT + 0.02, PZ);      // soporte negro en la base
+    cyl(g, 0.05, 0.05, 0.02, crom, PX, BELT + 0.05, PZ);      // base cromada del resorte
+    for (let k = 0; k < 9; k++) { const t = k / 8, r = 0.026 + 0.016 * Math.sin(Math.PI * t); const tor = new THREE.Mesh(new THREE.TorusGeometry(r, 0.0105, 6, 14), crom); tor.rotation.x = Math.PI / 2; tor.position.set(PX, BELT + 0.07 + t * (SPH - 0.04), PZ); g.add(tor); }      // espiras del resorte, más anchas al medio
+    const top = BELT + 0.04 + SPH, pg = new THREE.Group(); pg.name = 'pertiga'; pg.position.set(PX, top, PZ); g.add(pg);
+    const cv = document.createElement('canvas'); cv.width = 16; cv.height = 128; { const c = cv.getContext('2d'); c.fillStyle = '#f2f2f2'; c.fillRect(0, 0, 16, 128); c.fillStyle = '#16171a'; for (let k = -2; k < 12; k++) { c.beginPath(); c.moveTo(0, k * 12 + 8); c.lineTo(16, k * 12 - 4); c.lineTo(16, k * 12 + 4); c.lineTo(0, k * 12 + 16); c.fill(); } }
+    const tx = new THREE.CanvasTexture(cv); tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(1, 9);
+    cyl(pg, 0.016, 0.016, 0.05, crom, 0, 0.025, 0);      // tuerca del resorte
+    cyl(pg, 0.014, 0.014, PH, new THREE.MeshBasicMaterial({ map: tx }), 0, 0.05 + PH / 2, 0);
+    cyl(pg, 0.011, 0.011, 0.1, steel, 0, 0.05 + PH + 0.05, 0);      // punta metálica
+    const fc = document.createElement('canvas'); fc.width = fc.height = 128; { const c = fc.getContext('2d'); c.fillStyle = '#ff6a1a'; c.fillRect(0, 0, 128, 128); c.fillStyle = '#ee2b2b'; c.fillRect(6, 6, 116, 116); c.strokeStyle = '#d4f03a'; c.lineWidth = 17; c.beginPath(); c.moveTo(22, 14); c.lineTo(106, 114); c.moveTo(106, 14); c.lineTo(22, 114); c.stroke(); }
+    const fl = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(fc), side: THREE.DoubleSide })); fl.rotation.y = Math.PI / 2; fl.position.set(0, 0.05 + PH - 0.2, -0.16); pg.add(fl); }
+  const b = cyl(g, 0.11, 0.11, 0.14, new THREE.MeshBasicMaterial({ color: other ? 0xffb000 : 0x3d8bff }), 0.74, ROOF + 0.17, ZC - 0.16); b.name = 'beacon';
+  for (const ch of g.children) if (ch !== wg) ch.position.y += 0.1;      // altura libre mayor: la carrocería sube 10 cm sobre las ruedas
   blob(g, 3.0, 6.4);
   return g;
 }
@@ -126,14 +220,8 @@ function buildTruck(bodyC, accC, loaded) {
     { const s = new THREE.Shape(), r = R; s.moveTo(-3.4, 6.8); for (let k = 0; k <= 16; k++) { const x = -3.4 + 6.8 * k / 16; s.lineTo(x, 7.95 - (r - Math.sqrt(r * r - x * x)) + 0.02); } s.lineTo(3.4, 6.8);
       const fw = new THREE.Mesh(new THREE.ShapeGeometry(s), bs); fw.position.z = 2.0; g.add(fw); const fl = new THREE.Mesh(new THREE.ShapeGeometry(s), lam(0x25282c, { side: THREE.DoubleSide })); fl.position.z = 1.72; g.add(fl); }      // pared delantera hasta la corona
   }
-  if (loaded) {   // carga de roca dentro de la tolva
-    const rm = [lam(0x6e5c49), lam(0x8a7660), lam(0x574a3b)];
-    for (let i = 0; i < 36; i++) {
-      const x = (hash(i, 1) - 0.5) * 5.0, z = -2.1 + (hash(i, 2) - 0.5) * 7.2, sc = 0.55 + hash(i, 3) * 0.7;
-      const h = 0.4 + 1.9 * Math.max(0, 1 - (x / 2.9) ** 2) * Math.max(0, 1 - ((z + 2.1) / 3.9) ** 2);
-      const r = new THREE.Mesh(rockGeo, rm[i % 3]); r.scale.set(sc, sc * 0.75, sc);
-      r.position.set(x, Math.max(4.75 + h, TOP - (dep(z) - 0.35) * Math.pow(Math.max(0, 1 - (x / (W - 0.3)) ** 2), 0.3) + 0.4) + sc * 0.3, z); r.rotation.set(hash(i, 4) * 3, hash(i, 5) * 3, hash(i, 6) * 3); g.add(r);
-    }
+  if (loaded) {   // carga de material fino dentro de la tolva (los camiones que suben van cargados con fino): montón parejo que asoma sobre la corona
+    const y0 = Math.max(4.75 + 0.35, TOP - (dep(-2.1) - 0.35) + 0.4), m = finePile(2.95, Math.max(0.9, 4.75 + 2.3 - y0), 3.9); m.position.set(0, y0, -2.1); g.add(m);
   }
   blob(g, 8.4, 14);
   g.scale.set(1.1, 1, 1.1);      // medidas reales de un camión de 300 t: ~15 m de largo, ~9 m de ancho, ~7,9 m hasta la corona, neumáticos de ~4 m

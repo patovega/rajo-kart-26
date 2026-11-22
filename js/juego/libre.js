@@ -3,7 +3,7 @@ import { CRASH_U, TAU, VTOP } from '../config/diseno.js';
 import { clamp } from '../comun/mates.js';
 import { CELL, GD, GNX, GNZ, GX0, GZ0, H, START_S, f7h, frame, inF7 } from '../terreno/construir.js';
 import { onRoadC } from '../operaciones/malla.js';
-import { G, OBST, P, inp, keys } from './estado.js';
+import { G, OBST, P, endGame, inp, keys } from './estado.js';
 import { beep } from '../ui/sonido.js';
 import { setBanner } from '../ui/avisos.js';
 import { mundo as M } from '../mundo.js';
@@ -26,8 +26,9 @@ const freeBlocked = (x, z, hx, hz) => {      // talud, pila o caída adelante, o
   if (x < GX0 + 10 || z < GZ0 + 10 || x > GX0 + (GNX - 1) * CELL - 10 || z > GZ0 + (GNZ - 1) * CELL - 10) return true;      // fin del terreno
   const h0 = H(x, z), h1 = H(x + hx * 3, z + hz * 3);
   if (Math.abs(h1 - h0) > 2.2) return true;      // más de ~35°: talud, pila o caída
-  return OBST.some(o => Math.hypot(o.x - x, o.z - z) < o.r);
+  return OBST.some(o => o.r !== 1.2 && Math.hypot(o.x - x, o.z - z) < o.r);      // los cables por el piso (r 1,2) no frenan: se pasa por encima (y se paga)
 };
+const cableBajo = (x, z) => OBST.some(o => o.r === 1.2 && Math.hypot(o.x - x, o.z - z) < 1.9);      // la camioneta está sobre un cable tendido por el piso
 function stepFree(dt) {      // tránsito libre por el piso de la fase 7 (sin pistas ni reglas): se toma la Rampa Sur al llegar a ella
   const F = G.free, thr = Math.max(keys.up ? 1 : 0, inp.thr), brk = Math.max(keys.down ? 1 : 0, inp.brk);
   const vt = 8.3 + (G.TEST ? 13.9 : 5.6) * thr;      // 30 km/h sola, hasta 50 con ↑ o el pedal (80 en modo prueba)
@@ -44,6 +45,7 @@ function stepFree(dt) {      // tránsito libre por el piso de la fase 7 (sin pi
       if (a.d >= M.GATE.d && b.d < M.GATE.d) { if (b.s > M.GATE.s0 + 1.5 && b.s < M.GATE.s1 - 1.5) F.gate = true; else gateMsg = true; }
       else if (hiA && b.d < M.GATE.d) gateMsg = true; }      // bajar de la cancha hacia el camino tampoco vale: al camino se entra por el portón
   }
+  if (!G.TEST && cableBajo(nx, nz)) { F.x = nx; F.z = nz; P.v = 0; return endGame(false, 'Pasaste sobre el cable eléctrico.'); }      // federicovega (modo prueba) pasa sin consecuencias
   if (gateMsg) { P.v = 0; setBanner('Entra a la Rampa Sur por entre los postes pasacables.', 'warn'); G.bannerT = 2; }
   else if (freeBlocked(nx, nz, hx, hz)) { if (P.v > 3) { beep(90, 0.18, 'sawtooth', 0.06); G.shake = Math.max(G.shake, 0.3); } P.v = 0; }
   else { F.x = nx; F.z = nz; }

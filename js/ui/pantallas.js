@@ -40,6 +40,12 @@ function signOf(m) {         // señal de la regla incumplida
   if (/pretil|volcaste/.test(m)) return 'SALIRSE DE LA PISTA';
   return '';      // los choques no llevan señal
 }
+const wasted = (() => {      // pantalla «FALLASTE» estilo GTA (WASTED): fondo en grises y una franja oscura con el letrero rojo
+  const d = document.createElement('div'); d.id = 'wasted'; d.hidden = true; d.setAttribute('aria-hidden', 'true');
+  d.innerHTML = '<div class="wb"><b>FALLASTE</b><span></span></div>';
+  const st = document.createElement('style'); st.textContent = '#wasted{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;pointer-events:none;backdrop-filter:grayscale(1) brightness(.62) contrast(1.1);-webkit-backdrop-filter:grayscale(1) brightness(.62) contrast(1.1);animation:wIn .5s ease-out}#wasted[hidden]{display:none}#wasted .wb{width:100%;background:linear-gradient(transparent,rgba(0,0,0,.72) 22%,rgba(0,0,0,.72) 78%,transparent);padding:34px 0 30px;text-align:center}#wasted b{display:block;font:400 clamp(54px,12vw,150px)/1 Impact,"Arial Black",sans-serif;letter-spacing:.06em;color:#c8202a;text-shadow:0 3px 14px rgba(0,0,0,.8);animation:wZoom 2.6s ease-out forwards}#wasted span{display:block;margin-top:10px;font:600 clamp(16px,2.6vw,28px) Arial,sans-serif;color:#e8e3d8;letter-spacing:.04em}@keyframes wIn{from{opacity:0}to{opacity:1}}@keyframes wZoom{from{transform:scale(1.18)}to{transform:scale(1)}}';
+  document.head.appendChild(st); document.body.appendChild(d); return d;
+})();
 function terminarPartida(win, msg) {      // fin de la partida: pantalla de resultado, señal de la regla incumplida, captura del choque y envío al ranking
   if (G.mode !== 'play') return;
   G.mode = win ? 'win' : 'over'; stopEngine(); renderAlerts([]);
@@ -50,10 +56,12 @@ function terminarPartida(win, msg) {      // fin de la partida: pantalla de resu
   $('endAlt').textContent = Math.max(0, Math.min(Math.round(L - START_S), Math.round(P.s - START_S))); $('endOv').textContent = G.overtakes; $('endTm').textContent = fmt(G.tGame); showResult(win, msg);
   $('retryBtn').textContent = win ? 'Jugar de nuevo (R)' : 'Reintentar (R)';
   beep(win ? 880 : 140, win ? 0.4 : 0.6, win ? 'sine' : 'sawtooth', 0.08);
-  setTimeout(() => { el.ovEnd.hidden = false; $('retryBtn').focus(); }, win ? 300 : (G.crashFall ? 4200 : ((G.crashSide || G.crush) ? 1900 : 700)));
+  if (!win) { wasted.querySelector('span').textContent = msg.replace(/\.$/, ''); wasted.hidden = false; }      // «FALLASTE» en toda derrota, con el motivo debajo
+  setTimeout(() => { wasted.hidden = true; el.ovEnd.hidden = false; $('retryBtn').focus(); }, win ? 300 : (G.crashFall ? 4200 : ((G.crashSide || G.crush) ? 1900 : 700)) + 1800);
   el.spd.classList.remove('flash'); G.shake = win ? 0 : 0.7;
 }
 function startGame() {
+  wasted.hidden = true;
   audioStart();
   resetGame(); G.overT = 0; G.mode = 'play'; stopEngine(); startEngine();
   liveStart();

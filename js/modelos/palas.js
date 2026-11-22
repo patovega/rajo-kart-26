@@ -1,5 +1,5 @@
 // Palas: pala de cables tipo 4100XPC (buildShovel + shovelPose/dumpTune), pila en la tolva (makePile) y pala hidráulica frontal (buildHydShovel + hydPose).
-import { GRILLE_MAT, TRK, TRK2, box, cyl, grimeTex, lam, plateMat, rockGeo } from './materiales.js';
+import { GRILLE_MAT, TRK, TRK2, bas, box, cyl, finePile, grimeTex, lam, plateMat, rockGeo } from './materiales.js';
 import { hash, sm01 } from '../comun/mates.js';
 
 function buildShovel(num) {      // pala de cables tipo P&H 4100XPC: orugas, sala de máquinas amarilla con franjas negras, cabina adelante a la izquierda, pórtico, pluma negra con roldana, mango y balde negros
@@ -104,48 +104,95 @@ function shovelPose(sv, ph) {      // cava en el banco → gira → descarga en 
   }
 }
 const _rv = new THREE.Vector3(), _ry = new THREE.Vector3(0, 1, 0);
-function makePile() {
+function makePile() {      // montón de material tronado fino con colpas gruesas en la tolva
   const g = new THREE.Group(); g.position.y = 4.75;
-  const rm = [lam(0x6e5c49), lam(0x8a7660), lam(0x574a3b)];
-  for (let i = 0; i < 36; i++) {
-    const x = (hash(i, 1) - 0.5) * 5.0, z = -2.1 + (hash(i, 2) - 0.5) * 7.2, sc = 0.55 + hash(i, 3) * 0.7;
-    const h = 0.4 + 1.9 * Math.max(0, 1 - (x / 2.9) ** 2) * Math.max(0, 1 - ((z + 2.1) / 3.9) ** 2);
-    const r = new THREE.Mesh(rockGeo, rm[i % 3]); r.scale.set(sc, sc * 0.75, sc);
-    r.position.set(x, h + sc * 0.3, z); r.rotation.set(hash(i, 4) * 3, hash(i, 5) * 3, hash(i, 6) * 3); g.add(r);
-  }
+  const m = finePile(2.9, 2.1, 3.9); m.position.set(0, 0.35, -2.1); g.add(m);
   return g;
 }
-function buildHydShovel(num) {      // pala hidráulica grande tipo PC9000 (pala frontal): orugas grises, superestructura amarilla con cabina adelante a la izquierda, pluma y brazo con cilindros, balde frontal
-  const yel = lam(0xf0b90e, { map: grimeTex }), dk = lam(0x1f2023), blk = lam(0x2b2c2f), glass = lam(0x2d4250), rail = lam(0x161616), chrome = lam(0xc8c8c0), g = new THREE.Group();
-  for (const sx of [-1, 1]) { box(g, 2.0, 2.0, 10.6, TRK, sx * 3.6, 1.0, 0); for (const z of [-5.0, 5.0]) { const w = cyl(g, 1.0, 1.0, 2.05, TRK, sx * 3.6, 1.0, z); w.rotation.z = Math.PI / 2; }
-    for (let z = -4.8; z <= 4.8; z += 0.8) box(g, 2.1, 0.12, 0.42, TRK2, sx * 3.6, 2.03, z); box(g, 0.3, 1.0, 7.5, blk, sx * 4.62, 1.0, 0); }
-  box(g, 5.2, 1.6, 6.0, blk, 0, 1.9, 0); cyl(g, 3.0, 3.2, 0.6, dk, 0, 2.9, 0);
-  const house = new THREE.Group(); house.position.y = 3.2; g.add(house);
-  box(house, 8.6, 4.0, 9.6, yel, 0, 2.0, -1.4);                 // sala de máquinas (~8,6 m de ancho)
-  box(house, 8.7, 2.6, 2.0, yel, 0, 1.5, -6.9);                  // contrapeso
-  box(house, 8.0, 2.6, 0.1, GRILLE_MAT, 0, 2.6, -7.95);          // rejillas de los radiadores atrás
-  box(house, 2.8, 2.8, 3.0, yel, 2.7, 5.4, 2.0); box(house, 2.4, 1.5, 0.08, glass, 2.7, 5.7, 3.52); box(house, 0.08, 1.5, 2.4, glass, 4.12, 5.7, 2.0);      // cabina adelante a la izquierda (~9 m de alto)
-  box(house, 3.0, 2.2, 3.4, yel, -2.4, 5.1, -4.5);               // caseta de equipos arriba atrás
-  for (const z of [-6.0, -3.0, 0, 3.0]) for (const sx of [-1, 1]) box(house, 0.06, 1.1, 0.06, rail, sx * 4.25, 4.55, z);
-  for (const sx of [-1, 1]) box(house, 0.06, 0.06, 9.2, rail, sx * 4.25, 5.1, -1.5);
-  for (let k = 0; k < 7; k++) box(house, 1.0, 0.08, 0.35, rail, -4.7, 0.3 + k * 0.6, -6.0 + k * 0.45);      // escalera
-  if (num) for (const sx of [1, -1]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.8), plateMat(num)); p.position.set(sx * 4.32, 2.6, -2.5); p.rotation.y = sx * Math.PI / 2; house.add(p); }
-  const boom = new THREE.Group(); boom.position.set(0, 3.4, 3.4); house.add(boom);      // pluma de 10 m
-  box(boom, 2.2, 2.0, 10.4, yel, 0, 0, 5.0);
-  for (const sx of [-1, 1]) { const c = cyl(boom, 0.32, 0.32, 6.0, chrome, sx * 1.3, -1.0, 3.5); c.rotation.x = Math.PI / 2; }      // cilindros de la pluma
-  const stick = new THREE.Group(); stick.position.set(0, 0, 10); boom.add(stick);      // brazo de 6,5 m
-  box(stick, 1.7, 1.7, 6.9, yel, 0, 0, 3.1); { const c = cyl(stick, 0.28, 0.28, 5.0, chrome, 0, 1.2, 2.5); c.rotation.x = Math.PI / 2; }
-  const bucket = new THREE.Group(); bucket.position.set(0, 0, 6.5); stick.add(bucket);      // balde frontal (~5 m de ancho)
-  box(bucket, 5.0, 0.3, 3.8, yel, 0, -2.0, 1.4); for (const sx of [-1, 1]) box(bucket, 0.3, 3.6, 3.8, yel, sx * 2.5, -0.4, 1.4); box(bucket, 5.0, 3.6, 0.3, yel, 0, -0.4, -0.4);
-  for (let k = -2; k <= 2; k++) box(bucket, 0.4, 0.4, 0.8, lam(0x8a8d90), k * 1.0, -2.0, 3.6);      // dientes
-  const load = new THREE.Group(); bucket.add(load);
-  for (let k = 0; k < 8; k++) { const r = new THREE.Mesh(rockGeo, lam(k % 2 ? 0x6e5c49 : 0x8a7660)); const sc = 0.7 + 0.25 * (k % 3); r.scale.set(sc, sc * 0.7, sc); r.position.set((k % 4 - 1.5) * 1.1, -0.8 + (k % 2) * 0.5, 0.6 + Math.floor(k / 4) * 1.4); load.add(r); }
-  return { g, house, boom, stick, bucket, load };
+function buildHydShovel(num) {      // pala hidráulica Komatsu PC5500 en configuración retro (≈540 t, 2 × 940 kW, balde de 28 m3): orugas de 9,7 × 2,7 m y 7,5 m de ancho total, cabina a 8,6 m del suelo, cola de 7,55 m, pluma de 10 m y brazo de 5,1 m; cilindros que siguen la pose
+  const yel = lam(0xf0b20e, { map: grimeTex }), dk = lam(0x1f2023), blk = lam(0x2b2c2f), glass = lam(0x2d4250), rail = lam(0x161616), chrome = lam(0xc8c8c0), grisM = lam(0x4a4943, { map: grimeTex, side: THREE.DoubleSide }), acero = lam(0x8a8d90), g = new THREE.Group();
+  const rod = (grp, a, b, r, m) => { const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), me = new THREE.Mesh(new THREE.CylinderGeometry(r, r, d.length(), 8), m); me.position.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); me.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); grp.add(me); return me; };
+  const ext = (grp, pts, w, m, x = 0, bev = 0.1) => { const s = new THREE.Shape(); pts.forEach(([z, y], i) => i ? s.lineTo(-z, y) : s.moveTo(-z, y));      // perfil lateral [z, y] extruido a lo ancho con bisel
+    const d = Math.max(0.02, w - 2 * bev), ge = new THREE.ExtrudeGeometry(s, { depth: d, bevelEnabled: true, bevelSize: bev, bevelThickness: bev, bevelSegments: 2 }); ge.translate(0, 0, -d / 2); ge.rotateY(Math.PI / 2); const me = new THREE.Mesh(ge, m); me.position.x = x; grp.add(me); return me; };
+  // orugas: perfil con extremos redondos (rueda motriz atrás, guía adelante), zapatas, rodillos
+  for (const sx of [-1, 1]) { const x = sx * 3.1, s = new THREE.Shape();      // orugas (tabla Komatsu): zapata A = 1,35 m, ancho total C_A = 7,54 m, largo H = 9,72 m, alto D = 2,72 m
+    s.moveTo(-3.5, 0); s.lineTo(3.5, 0); s.absarc(3.5, 1.35, 1.35, -Math.PI / 2, Math.PI / 2, false); s.lineTo(-3.5, 2.7); s.absarc(-3.5, 1.35, 1.35, Math.PI / 2, 3 * Math.PI / 2, false);
+    const tg = new THREE.ExtrudeGeometry(s, { depth: 1.25, bevelEnabled: true, bevelSize: 0.06, bevelThickness: 0.05, bevelSegments: 1, curveSegments: 20 }); tg.rotateY(-Math.PI / 2); tg.translate(0.625, 0, 0); const tm = new THREE.Mesh(tg, TRK); tm.position.x = x; g.add(tm);
+    for (let a = 0; a < 46; a++) { const t = a / 46 * (14 + 2 * Math.PI * 1.35); let zz, yy, rot = 0; if (t < 7) { zz = -3.5 + t; yy = 0; } else if (t < 7 + Math.PI * 1.35) { const an = (t - 7) / 1.35; zz = 3.5 + Math.sin(an) * 1.38; yy = 1.35 - Math.cos(an) * 1.38; rot = -an; } else if (t < 14 + Math.PI * 1.35) { zz = 3.5 - (t - 7 - Math.PI * 1.35); yy = 2.7; rot = Math.PI; } else { const an = (t - 14 - Math.PI * 1.35) / 1.35; zz = -3.5 - Math.sin(an) * 1.38; yy = 1.35 + Math.cos(an) * 1.38; rot = Math.PI + an; }
+      const sh = box(g, 1.35, 0.1, 0.3, TRK2, x, yy, zz); sh.rotation.x = rot; }      // zapatas alrededor de toda la oruga
+    cyl(g, 0.95, 0.95, 1.5, lam(0x3a3b3e), x, 1.35, -3.5, Math.PI / 2); cyl(g, 1.05, 1.05, 1.4, lam(0x3a3b3e), x, 1.35, 3.5, Math.PI / 2); cyl(g, 0.35, 0.35, 1.6, dk, x, 1.35, -3.5, Math.PI / 2); cyl(g, 0.35, 0.35, 1.55, dk, x, 1.35, 3.5, Math.PI / 2);
+    for (let k = 0; k < 7; k++) cyl(g, 0.3, 0.3, 1.5, lam(0x3a3b3e), x, 0.55, -2.8 + k * 0.95, Math.PI / 2);      // 7 rodillos inferiores
+    for (const z of [-1.6, 0, 1.6]) cyl(g, 0.22, 0.22, 1.45, lam(0x3a3b3e), x, 2.35, z, Math.PI / 2);      // 3 rodillos superiores
+  }
+  box(g, 5.0, 1.1, 6.4, dk, 0, 1.55, 0); cyl(g, 3.3, 3.5, 0.6, dk, 0, 2.6, 0); cyl(g, 2.9, 2.9, 0.4, dk, 0, 3.1, 0);      // bastidor (despeje E ≈ 1 m) y corona de giro hasta la base de la superestructura
+  const house = new THREE.Group(); house.position.y = 3.31; g.add(house);      // superestructura: bajo ella I = 3,31 m; alto J = 3,1 m; de -3,3 m (N) a +3,97 m (M_B) del eje, pasillo hasta 4,6 m (M_A); cola P = 7,26 m
+  ext(house, [[-5.0, 0.15], [-5.0, 2.95], [-4.4, 3.1], [1.6, 3.1], [1.6, 0.15]], 7.1, yel, 0.33, 0.14);      // sala de máquinas
+  ext(house, [[-7.15, 0.3], [-7.15, 2.4], [-6.8, 2.95], [-5.0, 3.0], [-5.0, 0.15], [-6.7, 0.15]], 7.1, yel, 0.33, 0.14);      // contrapeso (cola P = 7,26 m del eje)
+  box(house, 5.8, 1.9, 0.08, GRILLE_MAT, 0.33, 1.3, -7.33); for (let x = -2.3; x <= 2.9; x += 0.45) box(house, 0.06, 1.8, 0.06, blk, x, 1.3, -7.38);      // rejilla del radiador atrás
+  for (const sx of [-1, 1]) for (const [z, w] of [[-3.7, 2.2], [-1.0, 2.0]]) { const xs = sx > 0 ? 4.02 : -3.35; box(house, 0.05, 2.3, w, dk, xs, 1.6, z); for (let y = 0.55; y <= 2.7; y += 0.17) box(house, 0.07, 0.05, w - 0.15, blk, xs + sx * 0.04, y, z); }      // paneles de persianas de ventilación
+  ext(house, [[1.4, 0.15], [1.4, 2.9], [2.4, 3.1], [3.9, 2.7], [3.9, 0.15]], 3.4, yel, 0, 0.12);      // soporte de la pluma al frente
+  box(house, 2.7, 2.0, 3.0, dk, 2.8, 1.15, 2.6);      // consola bajo la cabina
+  box(house, 2.6, 2.4, 2.9, yel, 2.8, 3.3, 2.5); box(house, 2.7, 0.2, 3.1, yel, 2.8, 4.5, 2.5);      // cabina: techo a K = 7,91 m del suelo
+  box(house, 2.25, 1.6, 0.06, glass, 2.8, 3.55, 3.98); box(house, 0.06, 1.6, 2.4, glass, 4.13, 3.55, 2.5); box(house, 0.06, 1.6, 2.4, glass, 1.49, 3.55, 2.5); box(house, 2.2, 1.6, 0.06, glass, 2.8, 3.55, 1.02);
+  for (const [x, z] of [[1.55, 3.95], [4.05, 3.95], [4.05, 1.05], [1.55, 1.05]]) box(house, 0.12, 1.7, 0.12, yel, x, 3.55, z);
+  box(house, 1.2, 0.1, 0.5, acero, 2.8, 4.65, 3.0); for (let k = 0; k < 3; k++) cyl(house, 0.1, 0.1, 0.2, bas(0xffb000), 2.25 + k * 0.4, 4.7, 1.6);      // faros y baliza sobre la cabina
+  box(house, 0.62, 0.1, 8.6, rail, 4.3, 2.4, -2.9);      // pasillo lateral (hasta M_A = 4,6 m)
+  for (const x of [-3.3, 4.6]) { const y0 = x > 0 ? 2.45 : 3.1; for (let z = -7.0; z <= 1.4; z += 1.7) rod(house, [x, y0, z], [x, y0 + 1.1, z], 0.04, rail); rod(house, [x, y0 + 1.1, -7.0], [x, y0 + 1.1, 1.4], 0.04, rail); rod(house, [x, y0 + 0.55, -7.0], [x, y0 + 0.55, 1.4], 0.03, rail); }
+  rod(house, [-3.3, 4.2, -7.0], [4.0, 4.2, -7.0], 0.04, rail);
+  cyl(house, 0.3, 0.3, 2.2, dk, -1.4, 4.2, -5.6); cyl(house, 0.3, 0.3, 2.2, dk, 1.4, 4.2, -5.6);      // escapes: arriba a L = 8,61 m del suelo
+  for (let k = 0; k < 9; k++) box(house, 1.0, 0.08, 0.35, rail, -3.85, 0.3 + k * 0.33, -2.2 + k * 0.1);      // escalera lateral a la cubierta
+  if (num) for (const sx of [1, -1]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.0), plateMat(num)); p.position.set(sx > 0 ? 4.06 : -3.4, 2.0, -5.6); p.rotation.y = sx * Math.PI / 2; house.add(p); }
+  const boom = new THREE.Group(); boom.position.set(0, 3.1, 2.7); house.add(boom);      // pluma de 6,3 m con el pie en la cubierta (dibujos de la PC5500: pie a 2,7 m del eje y ~6,4 m del suelo; el pasador de 3,8 m es de los cilindros de la pluma)
+  ext(boom, [[-0.6, -0.8], [3.0, -0.95], [5.8, -0.9], [6.65, -0.4], [6.85, 0.6], [5.7, 1.95], [3.2, 1.75], [0.5, 1.0], [-0.6, 0.5]], 2.0, yel, 0, 0.14);      // pluma de pala frontal con la joroba arriba (perfil de la guía)
+  { const hose = lam(0x0b0b0b);      // mangueras hidráulicas en arco sobre la pluma (base y unión con el brazo)
+    for (const [z0, y0, hh] of [[0.3, 1.0, 1.1], [3.4, 1.8, 0.9]]) { for (let i = 0; i < 6; i++) { const x = (i - 2.5) * 0.15, pts = [[x, y0, z0], [x, y0 + hh * 0.75, z0 + 0.45], [x, y0 + hh, z0 + 1.1], [x, y0 + hh * 0.75, z0 + 1.75], [x, y0, z0 + 2.2]].map(q => new THREE.Vector3(...q)); boom.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 18, 0.085, 6, false), hose)); }
+      box(boom, 1.0, 0.12, 0.2, dk, 0, y0, z0); box(boom, 1.0, 0.12, 0.2, dk, 0, y0, z0 + 2.2); } }
+  for (const sx of [-1, 1]) box(boom, 0.4, 0.8, 0.8, yel, sx * 0.9, -1.0, 5.3); box(boom, 2.2, 0.6, 0.8, yel, 0, -1.0, 3.0);      // orejas de los cilindros del balde (abajo de la punta) y de la pluma (abajo al medio)
+  const stick = new THREE.Group(); stick.position.set(0, 0, 6.3); boom.add(stick);      // brazo de 6,1 m, en C (con el pie alto calzan la pose baja del dibujo y la alta de la guía)
+  ext(stick, [[-0.7, -0.6], [1.5, -0.3], [3.2, -0.15], [5.0, -0.55], [6.1, -0.8], [6.3, 0.3], [5.2, 1.3], [3.2, 2.05], [1.4, 2.0], [-0.7, 1.1]], 2.5, yel, 0, 0.16); for (const sx of [-1, 1]) box(stick, 0.35, 0.7, 0.9, yel, sx * 1.4, 1.2, 1.3);      // brazo más ancho que la pluma: la abraza por fuera      // orejas de los cilindros del brazo      // brazo colgante: ancho arriba y más angosto hacia el balde, curvo (como la referencia)      // cuerpo del brazo: corto, grueso y con el lomo alto (como el de la PC5500)
+  const cuenco = lam(0x8f9293, { map: grimeTex }), dienteM = lam(0x6d7071), banda = lam(0x55595b), liner = lam(0x5b5d5e), os = lam(0x3a3935);      // balde de pala frontal tipo caja (render y guía de la PC5500): respaldo amarillo fijo al brazo; concha de acero gris (costados, piso, labio y 7 dientes) colgada de una bisagra arriba
+  const bucket = new THREE.Group(); bucket.position.set(0, 0, 6.1); stick.add(bucket);      // origen = pasador del brazo; +z adelante, balde nivelado con tilt 0: dientes ~4,4 m adelante y ~1,8 m bajo el pasador; respaldo de +1,65 a -2,2 m, ancho 4,8 m
+  const W = 4.8, HZ = 1.1, HY = 0.75;      // bisagra de la concha: arriba, delante del respaldo
+  const gh = new THREE.Group(); gh.position.set(0, HY, HZ); bucket.add(gh);      // la concha gira en la bisagra: al abrir, el piso y el labio se apartan del respaldo hacia adelante (rendija en V por abajo)
+  const aH = pts => pts.map(([z, y]) => [z - HZ, y - HY]);
+  // respaldo (fijo): orejas a los costados del brazo con los pasadores y placa trasera curva
+  for (const sx of [-1, 1]) ext(bucket, [[-0.4, 1.65], [0.3, 1.7], [0.75, 1.2], [1.15, 0.4], [0.95, -0.6], [1.2, -1.7], [1.5, -2.1], [1.05, -2.25], [0.3, -1.5], [-0.25, -0.6], [-0.55, 0.6]], 0.3, yel, sx * 1.6, 0.06);      // orejas del respaldo (de +1,65 a -2,2 m del pasador, como en la guía)
+  ext(bucket, [[0.85, 0.95], [1.15, 0.95], [1.25, -0.4], [1.4, -1.3], [1.65, -1.85], [1.9, -2.05], [1.6, -2.2], [1.35, -1.95], [1.1, -1.3], [0.95, -0.4]], W - 0.55, yel, 0, 0.08);      // placa trasera (cierra la caja por atrás)
+  box(bucket, W - 0.4, 0.55, 0.7, yel, 0, 0.85, 0.75);      // viga de arriba del respaldo
+  cyl(bucket, 0.42, 0.42, 3.6, os, 0, 0, 0, Math.PI / 2); cyl(bucket, 0.3, 0.3, 3.6, os, 0, 1.3, 0.15, Math.PI / 2); cyl(bucket, 0.28, 0.28, 3.6, os, 0, -1.35, 0.6, Math.PI / 2);      // pasadores: brazo, cilindros del balde y uno abajo
+  for (const sx of [-1, 1]) for (const [y, z] of [[0, 0], [1.3, 0.15], [-1.35, 0.6]]) cyl(bucket, 0.5, 0.5, 0.12, acero, sx * 1.8, y, z, Math.PI / 2);      // tapas de los pasadores
+  // concha (móvil)
+  const lado = [[1.0, 0.95], [1.7, 0.95], [3.95, -1.25], [4.0, -1.85], [3.1, -2.2], [1.65, -2.2], [1.2, -1.6], [1.0, -0.5]];      // costado trapezoidal: alto atrás (~3 m), bajo adelante; piso de ~2,8 m
+  for (const sx of [-1, 1]) { ext(gh, aH(lado), 0.26, cuenco, sx * (W / 2 - 0.13), 0.05);
+    for (let i = 0; i < 5; i++) { const b = box(gh, 0.07, 0.14, 1.3, banda, sx * (W / 2 + 0.03), -0.6 - i * 0.32 - HY + 0.6, 2.3 - HZ + i * 0.05); b.rotation.x = 0.55; }      // bandas de desgaste en el costado
+    box(gh, 0.34, 0.5, 2.3, cuenco, sx * (W / 2 - 0.05), 0.55 - HY - 0.05, 2.4 - HZ).rotation.x = 0.96;      // canto grueso del costado (borde de la boca)
+    box(gh, 0.5, 0.75, 0.6, yel, sx * 1.0, 0, 0); }      // eslabones de la bisagra
+  cyl(gh, 0.3, 0.3, W - 0.6, os, 0, 0, 0, Math.PI / 2);      // pasador de la bisagra
+  ext(gh, aH([[1.25, -1.85], [2.6, -1.95], [3.95, -1.6], [4.0, -1.95], [2.6, -2.25], [1.3, -2.15]]), W - 0.3, cuenco, 0, 0.06);      // piso
+  for (let z = 1.6; z < 3.8; z += 0.3) box(gh, W - 0.7, 0.06, 0.16, liner, 0, -1.92 - HY + (z - 1.6) * 0.12 + 0.02, z - HZ);      // placas de desgaste del piso
+  box(gh, W - 0.3, 0.55, 0.55, cuenco, 0, 0.75 - HY, 1.5 - HZ);      // viga de la boca arriba
+  box(gh, W, 0.4, 0.75, dienteM, 0, -1.78 - HY, 3.85 - HZ);      // labio
+  for (let k = 0; k < 7; k++) { const x = (k - 3) * ((W - 0.7) / 6), t = new THREE.Group(); t.position.set(x, -1.8 - HY, 4.1 - HZ); t.rotation.x = 0.12; gh.add(t);      // 7 dientes con adaptador, separados, apuntando adelante
+    const ad = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.32, 0.75), dienteM); ad.position.set(0, 0, 0.2); t.add(ad);
+    const tg = new THREE.CylinderGeometry(0.08, 0.22, 0.65, 4); tg.rotateY(Math.PI / 4); const di = new THREE.Mesh(tg, dienteM); di.rotation.x = Math.PI / 2; di.position.set(0, -0.02, 0.85); di.scale.set(1.0, 1, 0.6); t.add(di); }
+  for (let k = 0; k < 6; k++) box(gh, 0.24, 0.3, 0.6, banda, (k - 2.5) * ((W - 0.7) / 6), -1.72 - HY, 4.15 - HZ);      // protectores del labio entre dientes
+  const load = new THREE.Group(); load.position.set(0, -0.8, 2.4); bucket.add(load);
+  for (let k = 0; k < 8; k++) { const r = new THREE.Mesh(rockGeo, lam(k % 2 ? 0x6e5c49 : 0x8a7660)); const sc = 0.6 + 0.22 * (k % 3); r.scale.set(sc, sc * 0.7, sc); r.position.set((k % 4 - 1.5) * 0.95, -0.5 + (k % 2) * 0.4, -0.4 + Math.floor(k / 4) * 1.0); load.add(r); }
+  const rods = [];      // cilindros hidráulicos: se reubican en cada pose entre un punto fijo y uno móvil; cuerpo amarillo y vástago cromado
+  const cil = (oa, pa, ob, pb, r) => { const b = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 1, 12), yel), p = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.6, r * 0.6, 1, 10), chrome); g.add(b); g.add(p); rods.push({ b, p, oa, pa: new THREE.Vector3(...pa), ob, pb: new THREE.Vector3(...pb) }); };
+  for (const sx of [-1, 1]) cil(house, [sx * 0.8, 0.5, 2.75], boom, [sx * 0.8, -1.2, 3.0], 0.45);      // cilindros de la pluma: abajo, del frente de la máquina al medio de la pluma (guía)
+  for (const sx of [-1, 1]) cil(house, [sx * 1.35, 2.7, 3.3], stick, [sx * 1.4, 1.2, 1.3], 0.3);      // cilindros del brazo: casi horizontales, del frente de la máquina (bajo la cabina) a lo alto del brazo
+  for (const sx of [-1, 1]) cil(boom, [sx * 0.9, -1.2, 5.3], bucket, [sx * 1.2, 1.3, 0.15], 0.3);      // cilindros del balde: de la punta de la pluma al pasador alto del respaldo
+  box(stick, 0.9, 0.5, 0.7, yel, 0, -1.05, 2.6); cyl(stick, 0.22, 0.22, 1.1, lam(0x3a3935), 0, -1.2, 2.6, Math.PI / 2);      // oreja bajo el brazo (pasador del cilindro de apertura)
+  cil(stick, [0, -1.2, 2.6], bucket, [0, -1.35, 0.6], 0.36);      // cilindro: baja por el brazo hasta el pasador de abajo del respaldo (no a la concha de los dientes)
+  return { g, house, boom, stick, bucket, gate: gh, load, rods };
 }
-function hydPose(S, psi, r, y, tilt) {      // r, y: punto del balde respecto del pie de la pluma (cinemática inversa de dos tramos)
-  const L1 = 10, L2 = 6.5, D = Math.min(L1 + L2 - 0.05, Math.hypot(r, y)), p1 = Math.atan2(y, r) + Math.acos(Math.min(1, (L1 * L1 + D * D - L2 * L2) / (2 * L1 * D)));
+function hydPose(S, psi, r, y, tilt, ab) {      // ab: apertura de la placa trasera (0 cerrada, 1 abierta; si falta, según tilt)      // r, y: punto del balde respecto del pie de la pluma (cinemática inversa de dos tramos)
+  const L1 = 6.3, L2 = 6.1, D = Math.max(L1 - L2 + 0.2, Math.min(L1 + L2 - 0.05, Math.hypot(r, y))), p1 = Math.atan2(y, r) + Math.acos(Math.min(1, (L1 * L1 + D * D - L2 * L2) / (2 * L1 * D)));
   const p2 = Math.atan2(y - L1 * Math.sin(p1), r - L1 * Math.cos(p1));
-  S.house.rotation.y = psi; S.boom.rotation.x = -p1; S.stick.rotation.x = -(p2 - p1); S.bucket.rotation.x = p2 - tilt;
+  S.house.rotation.y = psi; S.boom.rotation.x = -p1; S.stick.rotation.x = -(p2 - p1); S.bucket.rotation.x = p2 - tilt; { const k = ab !== undefined ? ab : Math.max(0, Math.min(1, (-tilt - 0.3) / 0.6)); S.gate.rotation.x = -1.1 * k; }      // la concha gira en su bisagra de arriba: el labio y el piso se apartan del respaldo      // bisagra arriba: el borde de abajo se aparta hacia el operador y abre la rendija inferior      // la compuerta se abre y se separa del casco      // la compuerta se abre al descargar
+  S.g.updateMatrixWorld(true); const A = new THREE.Vector3(), B = new THREE.Vector3(), d = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  for (const R of S.rods) { A.copy(R.pa); R.oa.localToWorld(A); S.g.worldToLocal(A); B.copy(R.pb); R.ob.localToWorld(B); S.g.worldToLocal(B); d.subVectors(B, A); const len = d.length(); d.normalize();
+    R.b.quaternion.setFromUnitVectors(up, d); R.p.quaternion.copy(R.b.quaternion); R.b.scale.y = len * 0.55; R.b.position.copy(A).addScaledVector(d, len * 0.275); R.p.scale.y = len * 0.6; R.p.position.copy(B).addScaledVector(d, -len * 0.3); }
 }
-
 export { buildShovel, dumpTune, shovelPose, makePile, buildHydShovel, hydPose };
