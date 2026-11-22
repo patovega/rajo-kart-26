@@ -462,6 +462,7 @@ MARCAS_TRAZO = [
     [(-436.6, -524.0), (-550.0, -400.0), (-635.4, -280.6)],      # 44 con 34
     [(-114.0, -488.0), (50.0, -430.0), (228.6, -388.6)],      # 31 baja a la 42 (a su curva)
     [(100.6, -504.0), (114.3, -515.4)],      # 31 con la 48 (sus extremos quedaban a 18 m)
+    [(-456.0, -380.0), (-448.0, -392.0), (-408.0, -428.0), (-368.0, -456.0), (-328.0, -468.0), (-288.0, -488.0), (-248.0, -496.0), (-208.0, -492.0), (-168.0, -472.0), (-132.0, -484.0), 'directo'],      # franja plana del plano sin camino (botón «Punto» del usuario, x −410, z −430): rampa de 1337 a 1310 que empalma al oriente
 ]
 def trazos():
     from scipy.sparse.csgraph import dijkstra as dj
