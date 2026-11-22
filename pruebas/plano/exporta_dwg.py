@@ -257,10 +257,22 @@ for i, j in semillas:
     caminos.append([list(g(x, y)) for x, y in simplifica(Ps, 1.5)]); nuevos += 1
 print("rampas sueltas agregadas:", nuevos)
 # cota de cada camino (muestreada del terreno y suavizada, pendiente ≤ 12 %): [x, z, y] por vértice
+def monotona(y, w):      # regresión isotónica (pool adjacent violators) creciente, con pesos
+    bl = [[y[0] * w[0], w[0], 1]]
+    for k in range(1, len(y)):
+        bl.append([y[k] * w[k], w[k], 1])
+        while len(bl) > 1 and bl[-2][0] / bl[-2][1] > bl[-1][0] / bl[-1][1]: s2, w2, n2 = bl.pop(); bl[-1][0] += s2; bl[-1][1] += w2; bl[-1][2] += n2
+    return np.concatenate([np.full(n, s_ / w_) for s_, w_, n in bl])
 def cota_camino(c):
     pts = np.array(c, float); zs = np.array([Z[int(round((NC - z - N0) / CELL)), int(round((x + EC - E0) / CELL))] for x, z in pts]) - YC
     if len(zs) > 2:
         zs = uniform_filter1d(zs, 5, mode="nearest"); ds = np.maximum(np.hypot(*np.diff(pts, axis=0).T), 0.1)
+        dentro = np.mean([pit[int(round((NC - z - N0) / CELL)), int(round((x + EC - E0) / CELL))] for x, z in pts]) > 0.5
+        if dentro:      # dentro del rajo los caminos van siempre en un sentido (sin sube y baja) y con la pendiente cambiando de a poco
+            cum = np.concatenate([[0], np.cumsum(ds)]); w = np.gradient(cum) + 0.1; sg = 1.0 if zs[-1] >= zs[0] else -1.0; za, zb = zs[0], zs[-1]
+            z_t = zs.copy(); zs = sg * monotona(sg * zs, w); zs[0], zs[-1] = za, zb; zs = np.clip(zs, min(za, zb), max(za, zb)); zs = z_t + np.clip(zs - z_t, -8.0, 8.0)      # los extremos conservan su cota (empalman con lo vecino)
+            for _ in range(2):      # suavizado gaussiano por distancia (σ ≈ 40 m), sin mover los extremos
+                K = np.exp(-0.5 * ((cum[:, None] - cum[None, :]) / 40.0) ** 2) * w[None, :]; zz = (K @ zs) / K.sum(1); zz[0], zz[-1] = zs[0], zs[-1]; zs = zz
         for it in range(20):
             for k in range(1, len(zs)): zs[k] = min(zs[k - 1] + 0.12 * ds[k - 1], max(zs[k - 1] - 0.12 * ds[k - 1], zs[k]))
             for k in range(len(zs) - 2, -1, -1): zs[k] = min(zs[k + 1] + 0.12 * ds[k], max(zs[k + 1] - 0.12 * ds[k], zs[k]))
@@ -494,15 +506,24 @@ def trazos():
                     if dq < bb[0]: bb = (dq, float(q[2]))
             return bb[1]
         fija = [red_cerca(p_[0], p_[1], 40.0) for p_ in c_]
+        fija = [f if (f is not None and abs(f - z0) <= 6.0) else None for f, z0 in zip(fija, zs)]      # solo si el otro camino va a una cota parecida (si no, está en otro banco)
         for k in range(len(zs)):
             if fija[k] is not None: zs[k] = fija[k]
-        for it in range(20):
-            for k in range(1, len(zs)): zs[k] = min(zs[k - 1] + 0.12 * ds_[k - 1], max(zs[k - 1] - 0.12 * ds_[k - 1], zs[k]))
-            for k in range(len(zs) - 2, -1, -1): zs[k] = min(zs[k + 1] + 0.12 * ds_[k], max(zs[k + 1] - 0.12 * ds_[k], zs[k]))
-            for k in range(len(zs)):
-                if fija[k] is not None: zs[k] = fija[k]
         if y_a is not None: zs[0] = y_a
         if y_b is not None: zs[-1] = y_b
+        cum_ = np.concatenate([[0], np.cumsum(ds_)])
+        for k in range(1, len(zs) - 1):      # límite de 12 % con los extremos fijos: cada punto queda dentro del cono que permiten ambos extremos (las cotas compartidas son una guía)
+            lo = max(zs[0] - 0.12 * cum_[k], zs[-1] - 0.12 * (cum_[-1] - cum_[k])); hi = min(zs[0] + 0.12 * cum_[k], zs[-1] + 0.12 * (cum_[-1] - cum_[k]))
+            if lo <= hi: zs[k] = min(hi, max(lo, zs[k]))
+        for it in range(30):
+            for k in range(1, len(zs) - 1): zs[k] = min(zs[k - 1] + 0.12 * ds_[k - 1], max(zs[k - 1] - 0.12 * ds_[k - 1], zs[k]))
+            for k in range(len(zs) - 2, 0, -1): zs[k] = min(zs[k + 1] + 0.12 * ds_[k], max(zs[k + 1] - 0.12 * ds_[k], zs[k]))
+        if y_a is not None: zs[0] = y_a
+        if y_b is not None: zs[-1] = y_b
+        sg_ = 1.0 if zs[-1] >= zs[0] else -1.0; w_ = np.gradient(cum_) + 0.1; zs = sg_ * monotona(sg_ * zs, w_); zs[0] = y_a if y_a is not None else zs[0]; zs[-1] = y_b if y_b is not None else zs[-1]      # sin sube y baja
+        zs = np.clip(zs, min(zs[0], zs[-1]), max(zs[0], zs[-1]))
+        for _ in range(2):
+            K = np.exp(-0.5 * ((cum_[:, None] - cum_[None, :]) / 40.0) ** 2) * w_[None, :]; zz = (K @ zs) / K.sum(1); zz[0], zz[-1] = zs[0], zs[-1]; zs = zz
         c_ = [[p_[0], p_[1], round(float(y), 1)] for p_, y in zip(c_, zs)]; out.append(c_)
         Lt = float(np.hypot(*np.diff(pts, axis=0).T).sum()); print("trazo", wps[0], "->", wps[-1], ":", round(Lt), "m, cotas", c_[0][2], "->", c_[-1][2], "(%.1f %%)" % (abs(c_[-1][2] - c_[0][2]) / max(Lt, 1) * 100))
     return out
@@ -517,6 +538,32 @@ for q in pisos:
     c = cand[np.argmax(droad[m][cand])] if len(cand) else int(np.argmax(dt[m]))      # el sector del banco más alejado de los caminos (la perforadora no trabaja junto a un camino)
     q["cerca"] = list(g(E[c], Nn[c]))
     print("cancha", round(q["cx"]), round(q["cz"]), "→ malla en", q["cerca"], "a", int(droad[m][c]), "m del camino más cercano")
+# --- empalmes de todos los caminos: cada extremo que cae sobre otro camino (a < 25 m) toma su cota; la diferencia se reparte a lo largo del tramo (≤ 12 %)
+def cota_en(c, x, z):
+    bb = (1e9, None)
+    for a1, b1 in zip(c[:-1], c[1:]):
+        A1 = np.array(a1, float); B1 = np.array(b1, float); v = B1[:2] - A1[:2]; t = float(np.clip(np.dot(np.array([x, z]) - A1[:2], v) / (np.dot(v, v) or 1), 0, 1)); q = A1 + (B1 - A1) * t; dq = float(np.hypot(q[0] - x, q[1] - z))
+        if dq < bb[0]: bb = (dq, float(q[2]))
+    return bb
+ajustes = 0
+for i, c in enumerate(caminos):
+    if len(c) < 2: continue
+    zs = np.array([p_[2] for p_ in c], float); d_ = np.concatenate([[0], np.cumsum(np.hypot(*np.diff(np.array([p_[:2] for p_ in c], float), axis=0).T))]); Lc = d_[-1] or 1
+    fin = []
+    for e in (0, -1):
+        best = (25.0, None)
+        for o in caminos[:i]:      # se empalma con los caminos anteriores (ya ajustados)
+            dq, yq = cota_en(o, c[e][0], c[e][1])
+            if dq < best[0]: best = (dq, yq)
+        fin.append(best[1])
+    da = (fin[0] - zs[0]) if fin[0] is not None else 0.0; db = (fin[1] - zs[-1]) if fin[1] is not None else 0.0
+    if abs(da) < 0.3 and abs(db) < 0.3: continue
+    zs = zs + da * (1 - d_ / Lc) + db * (d_ / Lc)
+    for k in range(1, len(zs) - 1):
+        lo = max(zs[0] - 0.12 * d_[k], zs[-1] - 0.12 * (Lc - d_[k])); hi = min(zs[0] + 0.12 * d_[k], zs[-1] + 0.12 * (Lc - d_[k]))
+        if lo <= hi: zs[k] = min(hi, max(lo, zs[k]))
+    caminos[i] = [[p_[0], p_[1], round(float(y), 1)] for p_, y in zip(c, zs)]; ajustes += 1
+print("empalmes ajustados:", ajustes)
 with open(JS + r"\terreno_dwg.js", "w", encoding="utf8") as f:
     f.write("// Mundo real del rajo Catabela, exportado del plano GEO-SG-716 por pruebas/plano/exporta_dwg.py (no editar a mano).\n")
     f.write(f"// Coordenadas del juego: x = E − {EC:.0f}, z = {NC:.0f} − N (z = sur), y = cota − {YC:.0f}. La grilla de alturas está en terreno_dwg.bin (Uint16, decímetros sobre 1000 m, filas de norte a sur).\n")
