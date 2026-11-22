@@ -48,6 +48,40 @@ def empujar(Z):
         print("empuje: celdas cambiadas", int((Zn < Z0[II, JJ] - 0.3).sum()), "· excavación máx", round(float((Z0[II, JJ] - Zn).max()), 1), "m · largo del eje", round(Lt), "m")
     return Z
 Z = empujar(Z)
+# --- camino «celeste» por la orilla poniente de la fase 7: baja parejo desde el empalme del 76 hasta la azul (pedido del usuario, 22-11-2026): perfil fijo por puntos
+# (cota real) y, entre el camino y el piso de la fase 7, tres bancos de 16 m con berma de 8 m tallados en la orilla (no se toca el piso)
+CAMINO_BAJO_EJE = [(250.0, -352.0), (292.0, -350.0), (326.0, -336.0), (348.0, -308.0), (356.0, -272.0), (358.0, -245.0), (365.0, -212.0), (390.0, -170.0), (420.0, -119.0), (436.0, -60.0), (436.0, -5.0)]
+CAMINO_BAJO_COTAS = {0: 1271.7, 10: 1290.0}      # la celeste baja parejo desde el 76 (1296) y entra tangente a la azul (1271,7), que sigue al poniente hacia el fondo      # índice del punto → cota (m s. n. m.); entre puntos se interpola por distancia
+def perfil_bajo():
+    W = np.array(CAMINO_BAJO_EJE, float); dw = np.concatenate([[0], np.cumsum(np.hypot(*np.diff(W, axis=0).T))]); ks = sorted(CAMINO_BAJO_COTAS)
+    return W, dw, np.interp(dw, [dw[k] for k in ks], [CAMINO_BAJO_COTAS[k] - YC for k in ks])
+def tallar_bancos(Z):
+    W, dw, yw = perfil_bajo(); Z0 = Z.copy()
+    e0, e1 = W.min(0) - 260, W.max(0) + 260
+    j0, j1 = int(max(0, (e0[0] + EC - E0) / CELL)), int(min(nx - 1, (e1[0] + EC - E0) / CELL)); i0, i1 = int(max(0, (NC - e1[1] - N0) / CELL)), int(min(ny - 1, (NC - e0[1] - N0) / CELL))
+    II, JJ = np.mgrid[i0:i1 + 1, j0:j1 + 1]; X = E0 + JJ * CELL - EC; Zg = NC - (N0 + II * CELL)
+    from scipy.ndimage import map_coordinates
+    best = np.full(X.shape, 1e9); yr = np.zeros(X.shape); ks_ = np.zeros(X.shape, int); lado = np.zeros(X.shape, bool)
+    for k in range(len(W) - 1):
+        a, b = W[k], W[k + 1]; v = b - a; L2 = float(v @ v); t = np.clip(((X - a[0]) * v[0] + (Zg - a[1]) * v[1]) / L2, 0, 1); d = np.hypot(X - a[0] - v[0] * t, Zg - a[1] - v[1] * t)
+        w = d < best; best[w] = d[w]; yr[w] = (yw[k] + (yw[k + 1] - yw[k]) * t)[w]; ks_[w] = k
+        nn_ = np.array([-v[1], v[0]]) / np.sqrt(L2); mz = lambda q: map_coordinates(Z0, [[(NC - q[1] - N0) / CELL], [(q[0] + EC - E0) / CELL]], order=1)[0]; m_ = (a + b) / 2
+        if np.dot(np.array([519.5, -194.8]) - m_, nn_) > 0: nn_ = -nn_      # normal hacia afuera de la fase 7 (el relleno va del lado contrario a la fase 7)
+        lado[w] = (((X - a[0] - v[0] * t) * nn_[0] + (Zg - a[1] - v[1] * t) * nn_[1]) > 0)[w]
+    f7 = MPath(np.array(F7POLY_JUEGO)) if F7POLY_JUEGO else None
+    piso = f7.contains_points(np.column_stack([X.ravel(), Zg.ravel()])).reshape(X.shape) if f7 is not None else np.zeros(X.shape, bool)
+    dd = best - 19.0; kb = np.floor(np.maximum(dd, 0) / 14.0); r = np.maximum(dd, 0) - 14.0 * kb
+    hb = yr + YC + 16.0 * kb + 16.0 * np.clip(r / 6.0, 0, 1)      # (la grilla está en cota real) banco: cara de 6 m (≈ 69°) y berma de 8 m
+    zona = (dd > 0) & (dd < 3 * 14.0 + 6.0) & ~piso
+    Zn = np.where(zona, np.minimum(Z0[II, JJ], hb), Z0[II, JJ])
+    hf = yr + YC - 16.0 * kb - 16.0 * np.clip(r / 6.0, 0, 1)      # del otro lado, donde el camino va sobre relleno: bancos que bajan hasta el terreno (no un talud liso)
+    zf = (dd > -4) & (dd < 170) & ~piso & lado & (ks_ >= 4)      # no en el empalme con la azul (por ahí sube el camino del fondo)      # hasta que los bancos alcanzan el terreno (sin pared vertical al final); no en el empalme con la azul (ahí pasan los caminos al fondo)
+    Zn = np.where(zf, np.maximum(Zn, np.minimum(hf, yr + YC)), Zn); Z[II, JJ] = Zn
+    print("bancos del relleno: celdas", int((Zn > Z0[II, JJ] + 0.3).sum()), "· relleno máx", round(float((Zn - Z0[II, JJ]).max()), 1), "m")
+    print("bancos bajo la pala: celdas talladas", int((Zn < Z0[II, JJ] - 0.3).sum()), "· corte máx", round(float((Z0[II, JJ] - Zn).max()), 1), "m")
+    return Z
+F7POLY_JUEGO = [[500.0,-90.0],[540.0,-90.0],[584.0,-110.0],[610.0,-132.0],[618.0,-152.0],[610.0,-184.0],[592.0,-206.0],[570.0,-208.0],[574.0,-220.0],[538.0,-268.0],[538.0,-292.0],[518.0,-304.0],[518.0,-316.0],[500.0,-334.0],[426.0,-240.0],[466.0,-184.0],[458.0,-156.0],[474.0,-116.0]]      # piso de la fase 7 (F7_DWG.poly): no se talla
+Z = tallar_bancos(Z)
 # --- grilla: filas de norte a sur (z creciente)
 # dentro del rajo = depresión: relleno por inundación desde el borde de la grilla (priority flood); el bit 15 de la grilla marca «dentro del rajo»
 import heapq
@@ -206,7 +240,13 @@ def ruta_desde(c0):      # celdas desde c0 hasta la red ya dibujada (o la ruta)
 for q in pisos:
     if q.get("f7"): continue
     Eq, Nq = q["cx"] + EC, NC - q["cz"]; c0 = celda(Eq, Nq)
-    if not np.isfinite(dist[c0]): q["salida"] = None; continue
+    if not np.isfinite(dist[c0]):      # el centro puede caer en un cerro dentro del piso: se parte de la celda del piso más cercana al centro que tenga camino
+        mq_ = MPath(np.array([[x + EC, NC - z] for x, z in q["poly"]]))
+        xe_ = [p_[0] + EC for p_ in q["poly"]]; ne_ = [NC - p_[1] for p_ in q["poly"]]
+        J_, I_ = np.meshgrid(np.arange(int((min(xe_) - E0) / CELL), int((max(xe_) - E0) / CELL) + 1), np.arange(int((min(ne_) - N0) / CELL), int((max(ne_) - N0) / CELL) + 1))
+        cand_ = [(i_, j_) for i_, j_ in zip(I_.ravel(), J_.ravel()) if 0 <= i_ < ny and 0 <= j_ < nx and np.isfinite(dist[i_ * nx + j_]) and mq_.contains_point((E0 + j_ * CELL, N0 + i_ * CELL))]
+        if not cand_: q["salida"] = None; continue
+        i_, j_ = min(cand_, key=lambda t: (E0 + t[1] * CELL - Eq) ** 2 + (N0 + t[0] * CELL - Nq) ** 2); c0 = i_ * nx + j_
     path = ruta_desde(c0)
     if len(path) < 4: q["salida"] = None; continue
     pts = np.array([(E0 + (k % nx) * CELL, N0 + (k // nx) * CELL) for k in path], float)
@@ -389,8 +429,8 @@ XXg, YYg = np.meshgrid(np.arange(nx) * CELL + E0, np.arange(ny) * CELL + N0)
 caminos += ejes_pisos()
 # --- empalmes en pendiente marcados a mano: del punto (coordenadas del juego) a un camino ya trazado, bajo la cota dada, por el terreno (se acepta terreno hasta ~22 %:
 # el camino se excava a su cota) con pendiente pareja ≤ 11 %. Pedido del usuario (21-11-2026): el antiguo «celeste» baja del extremo poniente del piso largo y se empalma bajo la fase 7
-MARCAS_EMPALME = [((-27.6, 311.6), (426.6, -295.1), -440.0),      # (desde, camino al que se empalma = el que empieza cerca de este punto, empalme bajo esta cota)
-                  ((500.0, -0.4), (150.0, -348.0), None)]      # el usuario lo dibujó en azul en el mapa: del final del empalme anterior al camino 13 (al poniente de la fase 7); None = llega a ese punto
+MARCAS_EMPALME = [((-27.6, 311.6), (426.6, -295.1), -440.0, (436.0, -5.0))]      # (desde, camino al que se empalma = el que empieza cerca de este punto, empalme bajo esta cota, se corta al pasar a < 40 m de este punto)
+# el tramo de (500, 0) a la azul lo hace ahora el camino «celeste» (perfil fijo, más abajo)
 def grafo_empalme(gmax, kpen):
     rows_, cols_, w_ = [], [], []
     for di, dj_ in ((0, 1), (1, 0), (1, 1), (1, -1)):
@@ -404,7 +444,7 @@ def empalmes():
     from scipy.sparse.csgraph import dijkstra as dj
     out = []
     grafos = [(0.22, 40.0), (3.0, 400.0)]      # primero por terreno conducible (≤ 22 %); si no hay, se construye la rampa cortando bancos (lo empinado muy caro)
-    for (sx_, sz_), (cx_, cz_), ymax in MARCAS_EMPALME:
+    for (sx_, sz_), (cx_, cz_), ymax, *corte_pt in MARCAS_EMPALME:
         dest = min(caminos, key=lambda c: np.hypot(c[0][0] - cx_, c[0][1] - cz_))
         for gmax, kpen in grafos:
             Gr = grafo_empalme(gmax, kpen)
@@ -448,6 +488,7 @@ def empalmes():
             for k_ in range(1, len(Sg)):
                 Lc += float(np.hypot(Sg[k_][0] - Sg[k_ - 1][0], Sg[k_][1] - Sg[k_ - 1][1]))
                 if ymax is not None and Lc > 150 and min(dseg_(np.array(Sg[k_], float), c) for c in otros) < 3: corte = k_ + 1; break
+                if corte_pt and Lc > 150 and np.hypot(Sg[k_][0] - corte_pt[0][0], Sg[k_][1] - corte_pt[0][1]) < 40: corte = k_ + 1; break
             Sg = Sg[:corte]
             out.append(cota_camino(Sg))      # cota siguiendo el terreno, suavizada y ≤ 12 % (como los demás caminos); termina en el primer camino que encuentra
             print("empalme cortado en el primer camino existente:", Sg[-1], "a", round(Lc), "m")
@@ -463,11 +504,15 @@ MARCAS_TRAZO = [
     [(-114.0, -488.0), (50.0, -430.0), (228.6, -388.6)],      # 31 baja a la 42 (a su curva)
     [(100.6, -504.0), (114.3, -515.4)],      # 31 con la 48 (sus extremos quedaban a 18 m)
     [(-456.0, -380.0), (-448.0, -392.0), (-408.0, -428.0), (-368.0, -456.0), (-328.0, -468.0), (-288.0, -488.0), (-248.0, -496.0), (-208.0, -492.0), (-168.0, -472.0), (-132.0, -484.0), 'directo'],      # franja plana del plano sin camino (botón «Punto» del usuario, x −410, z −430): rampa de 1337 a 1310 que empalma al oriente
+    [(-636.0, -280.0), (-662.0, -252.0), (-680.0, -222.0), (-676.0, -200.0), (-652.0, -206.0), (-600.0, -262.0), (-530.0, -326.0), (-456.0, -380.0), 'directo'],      # curva cerrada: une el extremo sur del 80 con el poniente del camino nuevo (dibujo del usuario en el mapa de caminos)
+    [(250.0, -352.0), (292.0, -350.0), (326.0, -336.0), (348.0, -308.0), (356.0, -272.0), (358.0, -245.0), (365.0, -212.0), (390.0, -170.0), (420.0, -119.0), (436.0, -60.0), (436.0, -5.0), 'directo', {'cotas': CAMINO_BAJO_COTAS}],      # camino por la orilla poniente de la fase 7: sale del camino al fondo (cruce con él a la misma cota) y sube de 1273 a 1296 hasta el empalme del 76 (dibujo del usuario)
 ]
+PERFIL_FIJO = []
 def trazos():
     from scipy.sparse.csgraph import dijkstra as dj
     G = grafo_empalme(3.0, 15.0); Gc = None; out = []
     for wps in MARCAS_TRAZO:
+        fijo = next((w['cotas'] for w in wps if isinstance(w, dict)), None); wps = [w for w in wps if not isinstance(w, dict)]
         cortar = wps[-1] == 'cortar'; directo = wps[-1] == 'directo'; wps = [w for w in wps if w not in ('cortar', 'directo')]; cel = []
         if cortar and Gc is None: Gc = grafo_empalme(3.0, 2.0)
         if directo:      # curva suave (Catmull-Rom) por los puntos del dibujo, muestreada cada 4 m
@@ -525,10 +570,19 @@ def trazos():
         zs = np.clip(zs, min(zs[0], zs[-1]), max(zs[0], zs[-1]))
         for _ in range(2):
             K = np.exp(-0.5 * ((cum_[:, None] - cum_[None, :]) / 40.0) ** 2) * w_[None, :]; zz = (K @ zs) / K.sum(1); zz[0], zz[-1] = zs[0], zs[-1]; zs = zz
+        if fijo is not None:      # perfil fijo (cota dada en puntos del eje): se proyecta cada vértice sobre el eje y se interpola
+            W_, dw_, yw_ = perfil_bajo(); zs = []
+            for p_ in c_:
+                bb = (1e9, 0.0)
+                for k in range(len(W_) - 1):
+                    a, b = W_[k], W_[k + 1]; v = b - a; t = float(np.clip(((p_[0] - a[0]) * v[0] + (p_[1] - a[1]) * v[1]) / float(v @ v), 0, 1)); dq = float(np.hypot(p_[0] - a[0] - v[0] * t, p_[1] - a[1] - v[1] * t))
+                    if dq < bb[0]: bb = (dq, yw_[k] + (yw_[k + 1] - yw_[k]) * t)
+                zs.append(bb[1])
+            zs = np.array(zs); PERFIL_FIJO.append(len(out))      # posición en la lista de trazos (no se le aplica el ajuste de empalmes)
         c_ = [[p_[0], p_[1], round(float(y), 1)] for p_, y in zip(c_, zs)]; out.append(c_)
         Lt = float(np.hypot(*np.diff(pts, axis=0).T).sum()); print("trazo", wps[0], "->", wps[-1], ":", round(Lt), "m, cotas", c_[0][2], "->", c_[-1][2], "(%.1f %%)" % (abs(c_[-1][2] - c_[0][2]) / max(Lt, 1) * 100))
     return out
-caminos += trazos()
+_n0 = len(caminos); caminos += trazos(); FIJOS_IDX = {_n0 + k for k in PERFIL_FIJO}
 # --- canchas: centro de la malla de pozos = celda del piso más cercana a la ruta con ≥ 24 m de piso alrededor
 for q in pisos:
     if not q.get("cancha"): continue
@@ -548,7 +602,7 @@ def cota_en(c, x, z):
     return bb
 ajustes = 0
 for i, c in enumerate(caminos):
-    if len(c) < 2: continue
+    if len(c) < 2 or i in FIJOS_IDX: continue      # los de perfil fijo quedan como se pidieron
     zs = np.array([p_[2] for p_ in c], float); d_ = np.concatenate([[0], np.cumsum(np.hypot(*np.diff(np.array([p_[:2] for p_ in c], float), axis=0).T))]); Lc = d_[-1] or 1
     fin = []
     for e in (0, -1):

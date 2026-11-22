@@ -41,14 +41,23 @@ paso('terreno: distancia a la ruta, calzada excavada, piso de la fase 7 y patio 
   }
   {      // caminos interiores: calzada de 38 m (dos CAEX) excavada a la cota del camino, con transición de 14 m al terreno, como la ruta; GR = 1 en la calzada (ahí circulan camiones: los cables cruzan por postes, hay huellas y se pinta como camino)
     const dmin = new Float32Array(N).fill(1e9), hc = new Float32Array(N), R = WR + 14, nR = Math.ceil(R / CELL);
-    for (const C of CAMINOS_DWG) for (let k = 0; k < C.length - 1; k++) {
+    const d2 = new Float32Array(N).fill(1e9), h2 = new Float32Array(N), id1 = new Int32Array(N).fill(-1), dr = new Float32Array(N).fill(1e9), hr_ = new Float32Array(N), toc = [];      // segundo camino más cercano (para mezclar donde se pisan dos calzadas)
+    CAMINOS_DWG.forEach((C, r) => {
+      toc.length = 0;
+      for (let k = 0; k < C.length - 1; k++) {
       const [ax, az, ay] = C[k], [bx, bz, by] = C[k + 1], vx = bx - ax, vz = bz - az, L2 = vx * vx + vz * vz || 1;
       const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - GX0) / CELL) - nR), i1 = Math.min(GNX - 1, Math.ceil((Math.max(ax, bx) - GX0) / CELL) + nR), j0 = Math.max(0, Math.floor((Math.min(az, bz) - GZ0) / CELL) - nR), j1 = Math.min(GNZ - 1, Math.ceil((Math.max(az, bz) - GZ0) / CELL) + nR);
       for (let iz = j0; iz <= j1; iz++) for (let ix = i0; ix <= i1; ix++) {
         const x = GX0 + ix * CELL, z = GZ0 + iz * CELL, tt = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / L2)), d = Math.hypot(x - ax - vx * tt, z - az - vz * tt), i = iz * GNX + ix;
-        if (d < dmin[i]) { dmin[i] = d; hc[i] = ay + (by - ay) * tt; }
+        if (d < dr[i]) { if (dr[i] === 1e9) toc.push(i); dr[i] = d; hr_[i] = ay + (by - ay) * tt; }
       }
-    }
+      }
+      for (const i of toc) { const d = dr[i], h = hr_[i]; dr[i] = 1e9;      // top-2 por camino distinto
+        if (d < dmin[i]) { if (id1[i] !== r) { d2[i] = dmin[i]; h2[i] = hc[i]; } dmin[i] = d; hc[i] = h; id1[i] = r; }
+        else if (d < d2[i]) { d2[i] = d; h2[i] = h; } }
+    });
+    for (let i = 0; i < N; i++) if (d2[i] < R && dmin[i] < R) {      // dos calzadas que se pisan: cota mezclada según la distancia a cada eje (sin costura con escalón)
+      const w1 = 1 / (dmin[i] + 2) ** 2, w2 = 1 / (d2[i] + 2) ** 2; hc[i] = (hc[i] * w1 + h2[i] * w2) / (w1 + w2); }
     for (let i = 0; i < N; i++) { const d = dmin[i]; if (GD[i] === -1 && d <= WR) { GR[i] = 1; GCP[i] = 1; }      // camino que cruza un piso: la calzada se marca como camino (se pinta y tiene huellas) sin tocar la cota del piso; GCP = esa calzada (el mapa la dibuja blanca)
       if (d >= R || GD[i] <= WR + 14) continue;      // la ruta principal manda donde se cruzan
       GH[i] = d <= WR ? hc[i] : hc[i] * (1 - sm((d - WR) / 14)) + GH[i] * sm((d - WR) / 14); if (d <= WR) GR[i] = 1; }
