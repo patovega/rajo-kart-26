@@ -10,6 +10,9 @@ import { L, NS, f7h, frame, hr, inF7, px, pz } from './ruta.js';
 const CELL = DWG.CELL, GX0 = DWG.GX0, GZ0 = DWG.GZ0, GNX = DWG.GNX, GNZ = DWG.GNZ;
 const N = GNX * GNZ;
 const GH = new Float32Array(N), GD = new Float32Array(N), GI = new Int32Array(N), GP = new Uint8Array(N), GR = new Uint8Array(N), GCP = new Uint8Array(N), NOSE = new Uint8Array(N), HB = new Float32Array(N).fill(-1);      // GP: 1 = dentro del rajo (depresión), 0 = superficie; GR: 1 = camino interior
+const MORROS = [      // morros que quedan en el lado del fondo de un camino, marcados por el usuario (polígono en coordenadas del juego, cota en m)
+  { poly: [[36, -358], [90, -340], [195, -338], [200, -356], [235, -356], [240, -338], [334, -338], [342, -246], [250, -254], [96, -272], [36, -312]], cota: 1238 },      // lomo al poniente de la fase 7, entre el camino de la cota 1237 y la bajada al fondo (23-11-2026)
+];
 const sm = v => { v = Math.min(1, Math.max(0, v)); return v * v * (3 - 2 * v); };
 paso('terreno: grilla de alturas del plano', () => {
   for (let i = 0; i < N; i++) { GH[i] = (GRID16[i] & 0x7fff) * 0.1 + 1000 - DWG.YC; GP[i] = GRID16[i] >> 15; }
@@ -90,6 +93,10 @@ paso('terreno: distancia a la ruta, calzada excavada, piso de la fase 7 y patio 
         for (let dz = -nP; dz <= nP; dz++) for (let dx = -nP; dx <= nP; dx++) { const jx = ix + dx, jz = iz + dz; if (jx < 0 || jz < 0 || jx >= GNX || jz >= GNZ) continue; const j = jz * GNX + jx; if (GD[j] !== -1) continue; const dd = Math.hypot(dx, dz) * CELL; if (dd < best) { best = dd; hp = H0[j]; } }
         if (best < RP) { const w = sm(best / RP); GH[i] = hp * (1 - w) + H0[i] * w; } }
     }
+    for (const { poly, cota } of MORROS) {      // morros marcados a mano en el lado del fondo de un camino: se rebajan a la cota dada (solo baja)
+      const xs = poly.map(p => p[0]), zs = poly.map(p => p[1]), y = cota - DWG.YC;
+      for (let iz = Math.floor((Math.min(...zs) - GZ0) / CELL); iz <= Math.ceil((Math.max(...zs) - GZ0) / CELL); iz++) for (let ix = Math.floor((Math.min(...xs) - GX0) / CELL); ix <= Math.ceil((Math.max(...xs) - GX0) / CELL); ix++) {
+        const i = iz * GNX + ix; if (GH[i] > y && inPoly(GX0 + ix * CELL, GZ0 + iz * CELL, poly)) GH[i] = y; } }
     for (let it = 0; it < 3; it++) for (let iz = 1; iz < GNZ - 1; iz++) for (let ix = 1; ix < GNX - 1; ix++) {      // puntas sueltas (una celda más alta que todas sus vecinas, restos de los tallados): a la altura de la vecina más alta
       const i = iz * GNX + ix; let mx = -1e9; for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) if (a || b) mx = Math.max(mx, GH[i + b * GNX + a]);
       if (GH[i] > mx + 2.5) GH[i] = mx; }
