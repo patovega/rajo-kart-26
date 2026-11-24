@@ -26,15 +26,16 @@ function addHoles(list) {      // pozos de tronadura (instanciados): boca negra 
   M.scene.add(cut); M.scene.add(hole);
 }
 function placeDrill(x, z, yaw, pre) { M.OBST.push({ x, z, r: 6 }); const dr = buildDrill(pre, nextDrillNum()); dr.position.set(x, M.H(x, z) + 0.1, z); dr.rotation.y = yaw; M.scene.add(dr); }
+const PERF_EN = [[78, -536]];      // perforadoras marcadas a mano: en la cancha que contiene el punto, la perforadora va ahí y la malla se centra en ella (pedido del usuario, 24-11-2026)
 function buildDrills() {      // canchas de perforación en terrazas planas junto a la ruta: malla tresbolillo 8 × 9,2 m (burden × espaciamiento) alineada con el eje largo del piso, centrada en el punto del piso más cercano a la ruta (C.cerca), a ≥ 12 m del borde; perforadora en el extremo de la malla y, en la segunda cancha, también la de orugas en el otro extremo
   CANCHAS.forEach((C, k) => {
-    const sd = sdPoly(C.poly), ux = C.ux, uz = C.uz, vx = -uz, vz = ux, B = 8, S = 9.2, holes = [], cx = C.cerca[0], cz = C.cerca[1], y0 = M.H(cx, cz);
+    const sd = sdPoly(C.poly), ux = C.ux, uz = C.uz, vx = -uz, vz = ux, B = 8, S = 9.2, holes = [], mano = PERF_EN.find(([x, z]) => sd(x, z) < 0), cx = mano ? mano[0] : C.cerca[0], cz = mano ? mano[1] : C.cerca[1], y0 = M.H(cx, cz);
     const MB = C.marca ? 5 : 12;      // margen al borde (la terraza marcada es angosta)
     const dentro = (x, z) => sd(x, z) <= -MB && gdAt(x, z) === -1 && !onRoadC(x, z) && Math.abs(M.H(x, z) - y0) < 2.5;
     const libre = (x, z) => sd(x, z) <= -6 && gdAt(x, z) === -1 && !onRoadC(x, z) && Math.abs(M.H(x, z) - y0) < 2.5 && !M.OBST.some(o => Math.hypot(o.x - x, o.z - z) < o.r + 6);      // lugar para una perforadora: sobre el banco, fuera de los caminos
     let aMax = 0, aMin = 0; for (let a = 0; a <= 64; a += 4) { if (dentro(cx + ux * a, cz + uz * a)) aMax = a; else break; } for (let a = 0; a >= -64; a -= 4) { if (dentro(cx - ux * -a, cz - uz * -a)) aMin = a; else break; }      // largo de la malla hasta donde hay piso
     const sitio = (cands) => cands.map(([a, b]) => ({ x: cx + ux * a + vx * b, z: cz + uz * a + vz * b })).find(p => libre(p.x, p.z));
-    const q = sitio([[aMax + 7, 0], [aMax + 5, 10], [aMax + 5, -10], [aMin - 7, 0], [0, 40], [0, -40], [aMax, 0]]) || { x: cx, z: cz };      // perforadora en el extremo de la malla (sobre el banco, nunca en un camino)
+    const q = mano ? { x: cx, z: cz } : sitio([[aMax + 7, 0], [aMax + 5, 10], [aMax + 5, -10], [aMin - 7, 0], [0, 40], [0, -40], [aMax, 0]]) || { x: cx, z: cz };      // perforadora en el extremo de la malla (sobre el banco, nunca en un camino)
     for (let b = -36, row = 0; b <= 36; b += B, row++) for (let a = aMin + (row % 2) * S / 2; a <= aMax; a += S) {
       const px = cx + ux * a + vx * b + (hash(a, b) - 0.5) * 0.6, pz = cz + uz * a + vz * b + (hash(b, a) - 0.5) * 0.6;
       if (!dentro(px, pz) || Math.hypot(q.x - px, q.z - pz) < 9) continue; holes.push({ x: px, z: pz });

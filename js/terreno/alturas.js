@@ -16,6 +16,13 @@ const MORROS = [      // morros que quedan en el lado del fondo de un camino, ma
   { poly: [[648, -40], [690, -88], [730, -120], [744, -100], [740, -30], [726, 2], [690, -2], [650, -8]], cota: 0, aCamino: true },      // cuña entre las dos rampas que bajan de 1296 a la explanada de la malla: a la cota de la rampa más cercana (pedido del usuario, 23-11-2026)
   { poly: [[633, -8], [700, -20], [722, 24], [745, 50], [712, 118], [630, 128], [519, 128], [525, 64], [578, 21]], cota: 1279, parejo: true },      // extremo oriente de la explanada de la malla, entre el camino del sur y la pared (pedido del usuario, 23-11-2026)
   { poly: [[715, -56], [706, -5], [698, 15], [691, 27], [672, 48], [665, 52], [650, 55], [630, 55], [601, 51], [571, 53], [534, 66], [490, 60], [477, 61], [480, 2], [560, -4], [660, -8], [700, -20]], cota: 1279, parejo: true },      // isla con puntas entre el camino de 1279 y el que baja a la celeste: a 1279, una sola explanada (pedido del usuario, 23-11-2026)
+  { poly: [[165, -538], [203, -562], [287, -561], [347, -544], [383, -525], [369, -483], [320, -467], [249, -474], [197, -490], [170, -510]], cota: 1295.6, parejo: true },      // explanada rota al oriente de la cancha de la perforadora: plana a la cota de la explanada donde termina la bajada norte (pedido del usuario, 24-11-2026)
+  { poly: [[165, -628], [200, -646], [345, -650], [345, -594], [264, -604], [212, -608], [176, -614]], cota: 0, aCamino: true, parejo: true },      // adentro de la curva en U de la bajada norte: a la cota del tramo más cercano (antes quedaba una zanja entre los dos tramos y no cabían dos camiones; pedido del usuario, 24-11-2026)
+  { poly: [[-70, -512], [40, -506], [150, -516], [150, -452], [64, -452], [-43, -463], [-70, -470]], cota: 1311, banco: true },      // talud entre la cancha de la perforadora (1311) y la celeste: bancos limpios desde la orilla del camino (pedido del usuario, 24-11-2026)
+  { poly: [[150, -516], [250, -514], [250, -436], [205, -437], [179, -446], [150, -452]], cota: 1296, banco: true },      // lo mismo entre la explanada de 1296 y la celeste
+];
+const PRETILES = [      // pretiles de tierra marcados a mano (eje de a a b, cota de la cresta, ancho arriba y talud: alto/horizontal); solo suben el terreno
+  { a: [278, -409], b: [273, -449], cota: 1286, ancho: 3, talud: 2 },      // orilla poniente de la terraza de 1280 junto a la partida (cae 16 m al piso de la fase 7), entre el morro del cable y la loma del norte (pedido del usuario, 24-11-2026)
 ];
 const sm = v => { v = Math.min(1, Math.max(0, v)); return v * v * (3 - 2 * v); };
 paso('terreno: grilla de alturas del plano', () => {
@@ -102,10 +109,11 @@ paso('terreno: distancia a la ruta, calzada excavada, piso de la fase 7 y patio 
         for (let dz = -nP; dz <= nP; dz++) for (let dx = -nP; dx <= nP; dx++) { const jx = ix + dx, jz = iz + dz; if (jx < 0 || jz < 0 || jx >= GNX || jz >= GNZ) continue; const j = jz * GNX + jx; if (GD[j] !== -1) continue; const dd = Math.hypot(dx, dz) * CELL; if (dd < best) { best = dd; hp = H0[j]; } }
         if (best < RP) { const w = sm(best / RP); GH[i] = hp * (1 - w) + H0[i] * w; } }
     }
-    for (const { poly, cota, parejo, aCamino } of MORROS) {      // aCamino: cada celda a la cota del camino más cercano (cuña entre dos rampas)      // morros marcados a mano en el lado del fondo de un camino: se rebajan a la cota dada (solo baja)
+    for (const { poly, cota, parejo, aCamino, banco } of MORROS) {      // aCamino: cada celda a la cota del camino más cercano (cuña entre dos rampas)      // morros marcados a mano en el lado del fondo de un camino: se rebajan a la cota dada (solo baja)
       const xs = poly.map(p => p[0]), zs = poly.map(p => p[1]), y = cota - DWG.YC;
       for (let iz = Math.floor((Math.min(...zs) - GZ0) / CELL); iz <= Math.ceil((Math.max(...zs) - GZ0) / CELL); iz++) for (let ix = Math.floor((Math.min(...xs) - GX0) / CELL); ix <= Math.ceil((Math.max(...xs) - GX0) / CELL); ix++) {
-        const i = iz * GNX + ix, yi = aCamino ? hc[i] : y; if ((GH[i] > yi || parejo) && inPoly(GX0 + ix * CELL, GZ0 + iz * CELL, poly)) GH[i] = yi; } }
+        const i = iz * GNX + ix; if (banco) { const e = dmin[i] - WR; if (e > 0 && dmin[i] < R3 && inPoly(GX0 + ix * CELL, GZ0 + iz * CELL, poly)) { const k = Math.floor(e / 14); GH[i] = Math.min(y, hc[i] + 16 * k + 16 * Math.min(1, (e - 14 * k) / 6)); } continue; }      // banco: desde la orilla del camino, cara de 16 m en 6 m y berma de 8 m, hasta la cota dada
+        const yi = aCamino ? hc[i] : y; if ((GH[i] > yi || parejo) && inPoly(GX0 + ix * CELL, GZ0 + iz * CELL, poly)) GH[i] = yi; } }
     for (let it = 0; it < 3; it++) for (let iz = 1; iz < GNZ - 1; iz++) for (let ix = 1; ix < GNX - 1; ix++) {      // puntas sueltas (una celda más alta que todas sus vecinas, restos de los tallados): a la altura de la vecina más alta
       const i = iz * GNX + ix; let mx = -1e9; for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) if (a || b) mx = Math.max(mx, GH[i + b * GNX + a]);
       if (GH[i] > mx + 2.5) GH[i] = mx; }
@@ -139,6 +147,12 @@ paso('terreno: distancia a la ruta, calzada excavada, piso de la fase 7 y patio 
         for (const i of toc2) { const d = bd[i], y = by[i]; bd[i] = 1e9; if (id1[i] !== r || manda(i)) continue;
           let yy = d <= WR ? y : y * (1 - sm((d - WR) / 8)) + GH[i] * sm((d - WR) / 8); if (GD[i] >= 0 && GD[i] <= WR + 14) { const wr = sm((GD[i] - WR) / 14); yy = hr[GI[i]] * (1 - wr) + yy * wr; } GH[i] = yy; }
       });
+    }
+    for (const { a: [ax, az], b: [bx, bz], cota, ancho, talud } of PRETILES) {      // pretiles a mano: al final, sobre todo lo demás
+      const top = cota - 1700, R = ancho / 2 + 30 / talud, vx = bx - ax, vz = bz - az, L2 = vx * vx + vz * vz;
+      const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - R - GX0) / CELL)), i1 = Math.min(GNX - 1, Math.ceil((Math.max(ax, bx) + R - GX0) / CELL)), j0 = Math.max(0, Math.floor((Math.min(az, bz) - R - GZ0) / CELL)), j1 = Math.min(GNZ - 1, Math.ceil((Math.max(az, bz) + R - GZ0) / CELL));
+      for (let iz = j0; iz <= j1; iz++) for (let ix = i0; ix <= i1; ix++) { const x = GX0 + ix * CELL, z = GZ0 + iz * CELL, t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / L2)), d = Math.hypot(x - ax - vx * t, z - az - vz * t), i = iz * GNX + ix;
+        GH[i] = Math.max(GH[i], top - Math.max(0, d - ancho / 2) * talud); }
     }
   }
 });
