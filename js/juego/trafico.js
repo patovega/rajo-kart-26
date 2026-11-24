@@ -1,9 +1,10 @@
 // Tráfico: CAEX en el mismo sentido (mkSame), tráfico en contra (CAEX, aljibe, camionetas), su movimiento y aparición (stepTrafico), autorización para adelantar (requestAuth, findTarget, nearAuth) y la zona de la superficie con el wheel dozer que cruza empujando una roca (stepDozer).
 import { LANE, REQ_RANGE } from '../config/diseno.js';
-import { clamp } from '../comun/mates.js';
+import { clamp, hash } from '../comun/mates.js';
 import { addPlates } from '../modelos/materiales.js';
 import { ALJ_PLATE, CAEX_PLATE, buildPickup, protoAlj, protoOnc, protoSame } from '../modelos/camiones.js';
 import { buildDozerConRoca } from '../modelos/dozers.js';
+import { buildMotoniveladora } from '../modelos/motoniveladora.js';
 import { scene } from '../escena.js';
 import { H, L, SMIN, frame, wetRange } from '../terreno/construir.js';
 import { pad } from '../comun/texto.js';
@@ -33,6 +34,18 @@ function mkAlj(s) {
   addPlates(mesh, 703, ALJ_PLATE.f, ALJ_PLATE.r, ALJ_PLATE.s);
   return { s, u: LANE, v0: 4.2, v: 4.2, kind: 'aljibe', cl: 7.8, cw: 4.2, mesh, beacon: b, spray: mesh.getObjectByName('spray'), cyc: 0, spraying: true };
 }
+const MOTO_CORD = -2.9;      // el cordón de tierra de la motoniveladora queda 2,9 m a su izquierda (punta trasera de la hoja, hacia el pretil): se la pasa por la derecha, por el otro lado del cordón
+function mkMoto(s) {      // motoniveladora nivelando tu pista (subiendo a ~7 km/h con la hoja abajo): deja un cordón de tierra a su izquierda; hay que pedirle autorización y pasarla por la derecha
+  const mesh = buildMotoniveladora(); scene.add(mesh);
+  const pos = [], idx = [], n = Math.max(2, Math.floor(Math.min(700, L - 5 - s) / 2));
+  for (let i = 0; i <= n; i++) { const f = frame(s + i * 2), w = 0.6 + 0.2 * hash(i, 5), h = 0.5 + 0.3 * hash(5, i), dl = (hash(i * 3, 1) - 0.5) * 0.3;
+    for (const [du, y] of [[-w, 0], [dl, h], [w, 0]]) { const u = -LANE + MOTO_CORD + du, x = f.x + f.rx * u, z = f.z + f.rz * u; pos.push(x, H(x, z) + 0.05 + y, z); } }
+  for (let i = 0; i < n; i++) { const a = 3 * i, b = a + 3; idx.push(a, b, a + 1, a + 1, b, b + 1, a + 1, b + 1, a + 2, a + 2, b + 1, b + 2); }
+  const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); ge.setIndex(idx); ge.computeVertexNormals(); ge.setDrawRange(0, 0);
+  const cord = new THREE.Mesh(ge, new THREE.MeshLambertMaterial({ color: 0x7f6648, flatShading: true, side: THREE.DoubleSide })); scene.add(cord);
+  return { id: 0, kind: 'moto', s, u: -LANE, v: 0, v0: 1.9, mesh, beacon: null, auth: false, passed: false, prevD: s - P.s, s0: s, cord, ncord: n };
+}
+const nombreEq = t => t.kind === 'moto' ? 'la motoniveladora MN-01' : 'CAEX-' + pad(t.id);
 function findTarget() {
   let best = null;
   for (const t of trucks) { const d = t.s - P.s; if (d > 0 && d < REQ_RANGE && !t.auth && (!best || d < best.d)) best = { t, d }; }
@@ -66,10 +79,10 @@ function requestAuth() {
   const t = tg.t; t.auth = true;
   if (t.zona) startDozer(t);
   beep(520, 0.08, 'square', 0.04); beep(780, 0.1, 'square', 0.04, 0.1);
-  showRadio('<b>Tú</b>: Solicito autorización para adelantar a CAEX-' + pad(t.id) + '.');
+  showRadio('<b>Tú</b>: Solicito autorización para adelantar a ' + nombreEq(t) + '.');
   setTimeout(() => {
     if (G.mode !== 'play') return;
-    showRadio('<b>CAEX-' + pad(t.id) + '</b>: «Autorizado con precaución.»');
+    showRadio(t.kind === 'moto' ? '<b>MN-01</b>: «Autorizado. Me detengo; pasa por la derecha, por el otro lado del cordón.»' : '<b>CAEX-' + pad(t.id) + '</b>: «Autorizado con precaución.»');
     beep(660, 0.09, 'sine', 0.05); beep(990, 0.14, 'sine', 0.05, 0.1);
   }, 700);
 }
@@ -110,4 +123,4 @@ function stepTrafico(dt) {      // camiones en el mismo sentido, tráfico en con
   }
 }
 
-export { mkSame, mkOncPickup, mkOnc, mkAlj, findTarget, nearAuth, requestAuth, stepDozer, stepTrafico };
+export { MOTO_CORD, mkMoto, nombreEq, mkSame, mkOncPickup, mkOnc, mkAlj, findTarget, nearAuth, requestAuth, stepDozer, stepTrafico };

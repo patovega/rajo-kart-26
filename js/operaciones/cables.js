@@ -84,7 +84,7 @@ function groundCable(out, way, S, info) {      // último tramo por el piso junt
   pts.forEach((p, k) => { out.push(new THREE.Vector3(p.x, M.H(p.x, p.z) + 0.25, p.z)); if (k % 2 === 0 && k < pts.length - 3) M.OBST.push({ x: p.x, z: p.z, r: 1.2 }); info.ground.push(p); });
   const e = pts[pts.length - 1]; out.push(new THREE.Vector3(S.x + (e.x - S.x) * 0.6, M.H(S.x, S.z) + 1.4, S.z + (e.z - S.z) * 0.6));
   const curve = new THREE.CatmullRomCurve3(out); curve.curveType = 'centripetal';
-  M.scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, Math.min(6000, out.length * 3), 0.16, 6, false), lam(0x1a1a1a)));
+  M.scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, Math.min(6000, out.length * 3), 0.16, 6, false), lam(0xc8161c)));
 }
 const rimPoint = S => {      // punto plano en la superficie, afuera del borde del rajo, en la dirección de S desde el centro (para la subestación)
   let dx = S.x - M.PITC.x, dz = S.z - M.PITC.z; const n = Math.hypot(dx, dz) || 1; dx /= n; dz /= n;

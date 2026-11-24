@@ -27,7 +27,15 @@ function addHoles(list) {      // pozos de tronadura (instanciados): boca negra 
 }
 function placeDrill(x, z, yaw, pre) { M.OBST.push({ x, z, r: 6 }); const dr = buildDrill(pre, nextDrillNum()); dr.position.set(x, M.H(x, z) + 0.1, z); dr.rotation.y = yaw; M.scene.add(dr); }
 const PERF_EN = [[78, -536]];      // perforadoras marcadas a mano: en la cancha que contiene el punto, la perforadora va ahí y la malla se centra en ella (pedido del usuario, 24-11-2026)
-function buildDrills() {      // canchas de perforación en terrazas planas junto a la ruta: malla tresbolillo 8 × 9,2 m (burden × espaciamiento) alineada con el eje largo del piso, centrada en el punto del piso más cercano a la ruta (C.cerca), a ≥ 12 m del borde; perforadora en el extremo de la malla y, en la segunda cancha, también la de orugas en el otro extremo
+const PERF_PAR = [[[512, -47], [607, -87]]];      // pares de perforadoras marcadas a mano en un banco (pedido del usuario, 24-11-2026: banco de 1279 de la fase 7): una en cada punto y la malla entre las dos
+function mallaPar([ax, az], [bx, bz]) {      // malla tresbolillo 8 × 9,2 m a lo largo del tramo entre las dos perforadoras, 5 filas, solo donde el banco está a la cota de los puntos
+  const L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L, vx = -uz, vz = ux, y0 = (M.H(ax, az) + M.H(bx, bz)) / 2, holes = [];
+  for (let r = -2; r <= 2; r++) for (let a = (r & 1) * 4.6; a <= L; a += 9.2) { const x = ax + ux * a + vx * r * 8 + (hash(a, r) - 0.5) * 0.6, z = az + uz * a + vz * r * 8 + (hash(r, a) - 0.5) * 0.6;
+    if (Math.abs(M.H(x, z) - y0) < 2 && Math.hypot(x - ax, z - az) > 9 && Math.hypot(x - bx, z - bz) > 9) holes.push({ x, z }); }
+  addHoles(holes); placeDrill(ax, az, Math.atan2(ux, uz) + 0.3, false); placeDrill(bx, bz, Math.atan2(-ux, -uz) + 0.3, false);
+}
+function buildDrills() {
+  PERF_PAR.forEach(([a, b]) => mallaPar(a, b));      // canchas de perforación en terrazas planas junto a la ruta: malla tresbolillo 8 × 9,2 m (burden × espaciamiento) alineada con el eje largo del piso, centrada en el punto del piso más cercano a la ruta (C.cerca), a ≥ 12 m del borde; perforadora en el extremo de la malla y, en la segunda cancha, también la de orugas en el otro extremo
   CANCHAS.forEach((C, k) => {
     const sd = sdPoly(C.poly), ux = C.ux, uz = C.uz, vx = -uz, vz = ux, B = 8, S = 9.2, holes = [], mano = PERF_EN.find(([x, z]) => sd(x, z) < 0), cx = mano ? mano[0] : C.cerca[0], cz = mano ? mano[1] : C.cerca[1], y0 = M.H(cx, cz);
     const MB = C.marca ? 5 : 12;      // margen al borde (la terraza marcada es angosta)
@@ -152,6 +160,8 @@ function animOps(dt, tAnim) {
     D.px = nx; D.pz = nz;
   }
 }
+const MOTO_LN = [5.5, 2, -1.5, -5], MOTO_CORD = -2.9;      // carriles de las pasadas (desplazamiento lateral, m) y dónde cae el cordón respecto del centro de la máquina: la hoja va en diagonal (punta trasera
+      // al lado −), así cada pasada deja un cordón de tierra que la pasada siguiente (3,5 m más allá) recoge y vuelve a correr; el de la última queda en la orilla
 const MOTO_EN = [[432.0, -95.0]];      // motoniveladoras (GD955): perfilan el camino interior más cercano a cada punto (la celeste junto a la fase 7, se ve desde la partida)
 function addMotoniveladora(px, pz, ph) {      // tramo de ~130 m por el eje del camino interior más cercano, muestreado cada 2 m (x, z, tangente)
   let best = null; for (const C of CAMINOS_DWG) for (let k = 0; k < C.length; k++) { const d = Math.hypot(C[k][0] - px, C[k][1] - pz); if (!best || d < best.d) best = { d, C, k }; }
@@ -161,11 +171,21 @@ function addMotoniveladora(px, pz, ph) {      // tramo de ~130 m por el eje del 
   for (let s = s0, k = 0; s <= s1; s += 2) { while (k < C.length - 2 && cum[k + 1] < s) k++; const q = (s - cum[k]) / Math.max(1e-6, cum[k + 1] - cum[k]); P.push({ x: C[k][0] + (C[k + 1][0] - C[k][0]) * q, z: C[k][1] + (C[k + 1][1] - C[k][1]) * q }); }
   if (P.length < 10) return;
   for (let i = 0; i < P.length; i++) { const a = P[Math.max(0, i - 3)], b = P[Math.min(P.length - 1, i + 3)], n = Math.hypot(b.x - a.x, b.z - a.z) || 1; P[i].tx = (b.x - a.x) / n; P[i].tz = (b.z - a.z) / n; }
-  const g = buildMotoniveladora(); M.scene.add(g); OPS.MOTO.push({ g, P, ph });
+  const g = buildMotoniveladora(); M.scene.add(g);
+  const mat = new THREE.MeshLambertMaterial({ color: 0x7f6648, flatShading: true, side: THREE.DoubleSide }), cord = MOTO_LN.map((off, k) => {      // cordón (camellón) de cada pasada: sección triangular irregular, ~1,8 m de ancho y 0,55–0,85 m de alto, tierra removida más oscura
+    const o = off + MOTO_CORD, pos = [], idx = [];
+    P.forEach((p, i) => { const nx = -p.tz, nz = p.tx, cx = p.x + nx * o, cz = p.z + nz * o, w = 0.8 + 0.3 * hash(i, k), h = 0.55 + 0.3 * hash(k, i), dl = (hash(i * 3, k) - 0.5) * 0.3;
+      for (const [u, y] of [[-w, 0], [dl, h], [w, 0]]) { const x = cx + nx * u, z = cz + nz * u; pos.push(x, M.H(x, z) + 0.02 + y, z); } });
+    for (let i = 0; i < P.length - 1; i++) { const a = 3 * i, b = a + 3; idx.push(a, b, a + 1, a + 1, b, b + 1, a + 1, b + 1, a + 2, a + 2, b + 1, b + 2); }
+    const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); ge.setIndex(idx); ge.computeVertexNormals(); ge.setDrawRange(0, 0);
+    const m = new THREE.Mesh(ge, mat); M.scene.add(m); return m; });
+  const terrones = new THREE.Group(), tg = new THREE.DodecahedronGeometry(0.22, 0), tm = new THREE.MeshLambertMaterial({ color: 0x8d7457, flatShading: true });      // terrones que ruedan por la punta trasera de la hoja
+  for (let k = 0; k < 14; k++) { const r = new THREE.Mesh(tg, tm); r.scale.setScalar(0.6 + 0.9 * hash(k, 7)); terrones.add(r); } M.scene.add(terrones);
+  OPS.MOTO.push({ g, P, ph, cord, terrones });
 }
 function animMoto(tAnim) {      // pasada hacia adelante con la hoja abajo (~7 km/h), levanta la hoja, retrocede (~13 km/h), la baja y se corre al carril siguiente
   for (const Q of OPS.MOTO) {
-    const Lp = (Q.P.length - 1) * 2, tF = Lp / 2.0, tB = Lp / 3.6, T = tF + tB + 4, cyc = Math.floor((tAnim + Q.ph) / T), t = (((tAnim + Q.ph) % T) + T) % T, LN = [-5, -1.5, 2, 5.5], off = LN[((cyc % LN.length) + LN.length) % LN.length];      // tAnim es negativo durante la intro
+    const Lp = (Q.P.length - 1) * 2, tF = Lp / 2.0, tB = Lp / 3.6, T = tF + tB + 4, cyc = Math.floor((tAnim + Q.ph) / T), t = (((tAnim + Q.ph) % T) + T) % T, LN = MOTO_LN, kl = ((cyc % LN.length) + LN.length) % LN.length, off = LN[kl];      // tAnim es negativo durante la intro
     let s, alza;
     if (t < tF) { s = Lp * t / tF; alza = 0; } else if (t < tF + 2) { s = Lp; alza = (t - tF) / 2; } else if (t < tF + 2 + tB) { s = Lp * (1 - sm01((t - tF - 2) / tB)); alza = 1; } else { s = 0; alza = 1 - (t - tF - 2 - tB) / 2; }
     const f = s / 2, i = Math.min(Q.P.length - 2, Math.floor(f)), q = f - i, A = Q.P[i], B = Q.P[i + 1];
@@ -174,6 +194,18 @@ function animMoto(tAnim) {      // pasada hacia adelante con la hoja abajo (~7 k
     setWorldPose(Q.g, x, z, tx, tz); Q.g.userData.hoja.position.y = 0.3 * alza;
     if (Q.px !== undefined) { const mx = x - Q.px, mz = z - Q.pz, dist = Math.hypot(mx, mz), sg = mx * tx + mz * tz >= 0 ? 1 : -1; if (dist < 5) for (const w of Q.g.userData.ruedas) w.rotation.x += sg * dist / 0.82; }
     Q.px = x; Q.pz = z;
+    {      // cordones: el de esta pasada crece detrás de la punta de la hoja; el de la pasada anterior se recoge a medida que la hoja lo alcanza; el de la última pasada (orilla) queda siempre
+      const n = Q.P.length - 1, ib = Math.max(0, Math.min(n, Math.round((s + 0.9) / 2))), adelante = t < tF;
+      Q.cord.forEach((m, k) => { let a = 0, b = 0;
+        if (k === LN.length - 1) { a = 0; b = n; }
+        else if (k === kl) { a = 0; b = adelante ? ib : n; }
+        else if (k === kl - 1 && adelante) { a = ib; b = n; }
+        m.geometry.setDrawRange(12 * a, 12 * Math.max(0, b - a)); });
+      const T2 = Q.terrones; T2.visible = adelante && s > 1;
+      if (T2.visible) { const bx = x + tz * 2.7 + tx * 0.9, bz = z - tx * 2.7 + tz * 0.9;      // punta trasera de la hoja (lado −, un poco adelante del centro): la tierra rueda y cae hacia el cordón
+        T2.children.forEach((r, k) => { const u = ((tAnim * (0.9 + 0.1 * (k % 3)) + k * 0.37) % 1 + 1) % 1, lx = bx + tz * (0.2 + u * 0.6) - tx * (u * 1.4 + 0.3 * hash(k, 3)), lz = bz - tx * (0.2 + u * 0.6) - tz * (u * 1.4 + 0.3 * hash(k, 3));
+          r.position.set(lx, M.H(lx, lz) + 0.25 + 0.5 * (1 - u) * Math.abs(Math.sin(u * 6 + k)), lz); r.rotation.set(u * 9 + k, u * 7, k); }); }
+    }
   }
 }
 function drawTracks(pts) {      // huellas de camión: dos surcos oscuros (ruedas) siguiendo una curva suave por el piso

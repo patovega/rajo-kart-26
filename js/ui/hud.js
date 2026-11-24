@@ -65,8 +65,8 @@ function updateHud() {
 
   if (G.mode !== 'play') return;
   const tg = findTarget(), na = nearAuth();
-  if (tg) { el.auth.disabled = false; el.auth.className = ''; el.auth.innerHTML = 'Solicitar autorización<span class="kbk"> (0 / Espacio)</span><small>CAEX-' + pad(tg.t.id) + ' · a ' + Math.max(0, Math.round(tg.d - 8.5)) + ' m</small>'; }
-  else if (na) { el.auth.disabled = true; el.auth.className = 'done'; el.auth.innerHTML = 'Autorizado<small>Adelanta por la derecha</small>'; }
+  if (tg) { el.auth.disabled = false; el.auth.className = ''; el.auth.innerHTML = 'Solicitar autorización<span class="kbk"> (0 / Espacio)</span><small>' + (tg.t.kind === 'moto' ? 'Motoniveladora' : 'CAEX-' + pad(tg.t.id)) + ' · a ' + Math.max(0, Math.round(tg.d - 8.5)) + ' m</small>'; }
+  else if (na) { el.auth.disabled = true; el.auth.className = 'done'; el.auth.innerHTML = 'Autorizado<small>' + (na.t.kind === 'moto' ? 'Pasa por la derecha, lejos del cordón' : 'Adelanta por la derecha') + '</small>'; }
   else { el.auth.disabled = true; el.auth.className = ''; el.auth.innerHTML = 'Solicitar autorización<span class="kbk"> (0 / Espacio)</span><small>Acércate a un camión (hasta ' + REQ_RANGE + ' m)</small>'; }
 
   // avisos
@@ -82,6 +82,7 @@ function updateHud() {
   if (gapMin < FOLLOW_DIST + 12) A('caex', '🚛', Math.max(0, Math.round(gapMin)) + ' m', 'Mín. ' + FOLLOW_DIST + ' m', gapMin < FOLLOW_DIST + 5 ? 'bad' : 'warn');
   if (kmh > 60 && !G.TEST) A('vel', 'SIGN:' + Math.round(kmh), '', 'Límite 60', 'bad');
   else if (kmh >= 56) A('vel', 'SIGN:60', '', 'Cerca del límite', 'warn');
+  { const mn = trucks.find(t => t.kind === 'moto' && t.s - P.s > -12 && t.s - P.s < 160); if (mn) A('moto', '🚜', Math.max(0, Math.round(mn.s - P.s - 9.8)) + ' m', mn.auth ? 'Pasa por la derecha' : 'Motoniveladora', 'warn'); }
   if (slickNow(P.s) > 0.3) A('mojado', '💧', '', 'Piso mojado', 'warn');
   { const zn = GEO_ZONES.find(z => P.s > z.a - 110 && P.s < z.b); if (zn) A('zona', '⛰', P.s < zn.a ? Math.round(zn.a - P.s) + ' m' : '', 'Riesgo geotécnico', 'warn'); }      // aviso 110 m antes y mientras dura cada tramo de riesgo
   if (G.wrongT > 1.5) A('pista', '↩', '', 'Tu pista', 'bad');

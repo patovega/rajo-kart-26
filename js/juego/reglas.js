@@ -9,14 +9,14 @@ import { G, P, endGame, inp, keys, oncs, pickup, rocasPista, rocks, trucks } fro
 import { beep } from '../ui/sonido.js';
 import { cotillon, metaMensaje, renderAlerts, setBanner, speak } from '../ui/avisos.js';
 import { mkRoca, updateRocks } from './rocas.js';
-import { mkAlj, mkSame, stepDozer, stepTrafico } from './trafico.js';
+import { MOTO_CORD, mkAlj, mkMoto, mkSame, nombreEq, stepDozer, stepTrafico } from './trafico.js';
 import { stepFree } from './libre.js';
 import { stepArrival } from './llegada.js';
 
 /* ───────────── Simulación ───────────── */
 function resetGame() {
   resetCaexIds();
-  for (const t of trucks.concat(oncs)) scene.remove(t.mesh);
+  for (const t of trucks.concat(oncs)) { scene.remove(t.mesh); if (t.cord) scene.remove(t.cord); }
   for (const r of rocks) scene.remove(r.mesh);
   for (const c of rocasPista) scene.remove(c.mesh);
   rocasPista.length = 0;
@@ -26,10 +26,14 @@ function resetGame() {
   G.tGame = 0; G.overtakes = 0; G.spawnT = 8; G.wrongT = 0; G.beepT = 0; G.shake = 0;
   let s = START_S + 110;
   while (s < L - 60) { trucks.push(mkSame(s, nextCaexId())); s += 130 + Math.random() * 110; }
+  {      // una motoniveladora nivelando tu pista en la mitad del recorrido, lejos del carril CAEX, del piso de la fase 7 y de los camiones
+    let sm = null; for (let c = START_S + 1300 + Math.random() * 300; c < L - 900; c += 40) if (!(c > CAEX_LANE.a - 150 && c < CAEX_LANE.b + 50) && (!PLAT || Math.abs(c - PLAT.se) > PLAT.HL + 80)) { sm = c; break; }
+    if (sm !== null) { for (let i = trucks.length - 1; i >= 0; i--) if (Math.abs(trucks[i].s - sm) < 90) { scene.remove(trucks[i].mesh); trucks.splice(i, 1); } trucks.push(mkMoto(sm)); }
+  }
   for (let rs = CAEX_LANE.a + 30; rs < CAEX_LANE.b - 60; rs += 170) { const t = mkSame(rs, nextCaexId()); t.u = CAEX_LANE.u; trucks.push(t); }      // CAEX en el carril solo CAEX
   const alj = mkAlj(P.s + 190); oncs.push(alj);       // un solo aljibe: viene bajando y deja el camino mojado
   alj.cyc = 4; seedWet(alj.s + 7, alj.v, alj.cyc); G.aljT = 80 + Math.random() * 50; G.pickT = 20 + Math.random() * 15; updateRoad(0);
-  if (G.TEST) { for (const t of trucks.concat(oncs)) scene.remove(t.mesh); trucks.length = 0; oncs.length = 0; }      // modo prueba: camino libre
+  if (G.TEST) { for (const t of trucks.concat(oncs)) { scene.remove(t.mesh); if (t.cord) scene.remove(t.cord); } trucks.length = 0; oncs.length = 0; }      // modo prueba: camino libre
   setBanner('');
 }
 
@@ -82,9 +86,11 @@ function step(dt) {
     return endGame(false, G.crashFall ? 'Pasaste el pretil hacia el rajo: rodaste y caíste.' : 'Te fuiste contra el pretil y volcaste de lado.');
   }
   if (P.s > CAEX_LANE.a && P.s < CAEX_LANE.b && Math.abs(P.u - CAEX_LANE.u) < 7) return endGame(false, 'Entraste al carril solo para CAEX.');
-  for (const t of trucks) if (Math.abs(t.s - P.s) < 9.8 && Math.abs(t.u - P.u) < 5.2) {
+  for (const t of trucks) if (t.kind === 'moto' && P.s > t.s0 && P.s < t.s + 1 && P.u < -LANE + MOTO_CORD + 1.9)      // el cordón de tierra que deja la hoja
+    return endGame(false, 'Pasaste por encima del cordón de tierra de la motoniveladora: se pasa por el otro lado del cordón.');
+  for (const t of trucks) if (Math.abs(t.s - P.s) < 9.8 && Math.abs(t.u - P.u) < (t.kind === 'moto' ? 3.8 : 5.2)) {
     G.crush = { by: t, dir: 0, t: 0, snd: false };
-    return endGame(false, 'Chocaste con el camión CAEX-' + pad(t.id) + ': la camioneta quedó aplastada.');
+    return endGame(false, t.kind === 'moto' ? 'Chocaste con la motoniveladora.' : 'Chocaste con el camión CAEX-' + pad(t.id) + ': la camioneta quedó aplastada.');
   }
   for (const o of oncs) if (Math.abs(o.s - P.s) < (o.cl || 8.6) && Math.abs(o.u - P.u) < (o.cw || 4.7)) {
     G.crush = { by: o, dir: -1, t: 0, snd: false };
@@ -93,7 +99,7 @@ function step(dt) {
   for (const t of trucks) {
     const d = t.s - P.s;
     if (!t.auth && d > 0 && Math.abs(t.u - P.u) < 3.2 && d - 9.8 < FOLLOW_DIST)      // con autorización no rige la distancia
-      return endGame(false, 'Te acercaste a menos de ' + FOLLOW_DIST + ' m del CAEX-' + pad(t.id) + '.');
+      return endGame(false, 'Te acercaste a menos de ' + FOLLOW_DIST + ' m ' + (t.kind === 'moto' ? 'de la motoniveladora' : 'del CAEX-' + pad(t.id)) + '.');
   }
   for (const c of rocasPista) if (Math.abs(c.s - P.s) < c.r + 2.4 && Math.abs(c.u - P.u) < c.r + 0.95)
     return endGame(false, 'Chocaste con una roca en el camino.');
@@ -103,8 +109,8 @@ function step(dt) {
     const d = t.s - P.s;
     if (d > -30 && d < 42) context = true;
     if (t.prevD > 0 && d <= 0) {
-      if (!t.auth) return endGame(false, 'Adelantaste a CAEX-' + pad(t.id) + ' sin solicitar autorización.');
-      if (P.u < t.u + 2) return endGame(false, 'Solo se adelanta por la derecha.');
+      if (!t.auth) return endGame(false, 'Adelantaste a ' + nombreEq(t) + ' sin solicitar autorización.');
+      if (P.u < t.u + 2) return endGame(false, t.kind === 'moto' ? 'A la motoniveladora se la pasa por la derecha, por el otro lado del cordón.' : 'Solo se adelanta por la derecha.');
       t.passed = true; G.overtakes++; setBanner('Adelantamiento completado. Vuelve a tu pista.', 'ok'); G.bannerT = 2.2;
     }
     if (d > 0) t.passed = false;

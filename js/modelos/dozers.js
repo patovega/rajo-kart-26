@@ -1,6 +1,12 @@
 // Dozers: wheel dozer tipo 854K, bulldozer de orugas tipo D10 y el wheel dozer sencillo con roca de la zona de la superficie.
 import { TRK, TRK2, bas, box, cyl, grimeTex, lam, rockGeo } from './materiales.js';
 
+function halo(g) {      // halo de seguridad en el suelo alrededor del equipo: zona roja hasta 6 m y amarilla hasta 10 m (relleno translúcido y borde marcado)
+  const H = new THREE.Group(); H.name = 'halo'; H.rotation.x = -Math.PI / 2; H.position.y = 0.15;
+  const m = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 });
+  for (const [r0, r1, c, o] of [[0, 6, 0xff2a1a, 0.16], [6, 10, 0xffd400, 0.14], [5.6, 6, 0xff2a1a, 0.85], [9.5, 10, 0xffd400, 0.85]]) H.add(new THREE.Mesh(new THREE.RingGeometry(r0, r1, 56), m(c, o)));
+  g.add(H); return g;
+}
 function buildWheelDozer() {      // wheel dozer Komatsu WD600-6 (≈49 t, 502 HP, neumáticos 45/65 R45 de 2,6 m, hoja de ≈5,2 m): carrocería y hoja como superficies redondeadas (perfiles extruidos con bisel), neumáticos torneados, guardabarros en arco, cabina inclinada, articulación central
   const g = new THREE.Group(), yel = lam(0xf2c200, { map: grimeTex }), yel2 = lam(0xe0b000), dk = lam(0x1d1e21), tire = lam(0x151515, { side: THREE.DoubleSide }), glass = lam(0x2b3f4d, { side: THREE.DoubleSide }), steel = lam(0x6b6e72), blk = lam(0x0b0b0b), chrome = lam(0xb8bcc0), hyd = lam(0x8d9094), gris = lam(0x44474c), gris2 = lam(0x2f3236);
   const V = (x, y, z) => new THREE.Vector3(x, y, z), Y = V(0, 1, 0), Z = V(0, 0, 1);
@@ -54,7 +60,7 @@ function buildWheelDozer() {      // wheel dozer Komatsu WD600-6 (≈49 t, 502 H
   for (const x of [-2, -1, 0, 1, 2]) box(g, 0.25, 1.4, 0.35, yel, x, 1.4, 5.8);
   { const c = document.createElement('canvas'); c.width = 256; c.height = 64; const x = c.getContext('2d'); x.fillStyle = '#1d4a9a'; x.fillRect(0, 8, 70, 12); x.fillStyle = '#f4f4f0'; x.fillRect(0, 22, 70, 6); x.fillStyle = '#1d4a9a'; x.fillRect(0, 30, 70, 12); x.fillStyle = '#111'; x.fillRect(80, 6, 168, 52); x.fillStyle = '#f4f4f0'; x.font = 'bold 40px Arial'; x.textAlign = 'center'; x.fillText('WD600', 164, 46);
     const m = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) }); for (const sx of [-1, 1]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.48), m); p.position.set(sx * 1.66, 1.8, -2.9); p.rotation.y = sx * Math.PI / 2; g.add(p); } }      // rótulo WD600
-  return g;
+  return halo(g);
 }
 function buildTrackDozer() {      // bulldozer de orugas Komatsu D475A-8R (≈108 t, ≈970 HP, trocha 2,77 m, hoja semi-U oscura de ≈5,6 m): orugas con rueda motriz alta, capó largo con escapes y prefiltros, cabina atrás con baranda, brazos de empuje y cilindros de levante, desgarrador
   const g = new THREE.Group(), yel = lam(0xf2c200, { map: grimeTex }), dk = lam(0x1d1e21), glass = lam(0x2b3f4d, { side: THREE.DoubleSide }), steel = lam(0x7b7e82), blk = lam(0x0b0b0b), gris = lam(0x3b3e43), hyd = lam(0x8d9094), chrome = lam(0xb8bcc0);
@@ -108,7 +114,7 @@ function buildTrackDozer() {      // bulldozer de orugas Komatsu D475A-8R (≈10
     box(g, 0.36, 0.3, 0.55, steel, 0, 0.12, -6.62).rotation.x = 0.4; }
   { const c = document.createElement('canvas'); c.width = 256; c.height = 64; const x = c.getContext('2d'); x.fillStyle = '#111'; x.fillRect(0, 6, 256, 52); x.fillStyle = '#f4f4f0'; x.font = 'bold 38px Arial'; x.textAlign = 'center'; x.fillText('D475A', 128, 45);
     const m = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) }); for (const sx of [-1, 1]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), m); p.position.set(sx * 1.72, 3.1, -1.3); p.rotation.y = sx * Math.PI / 2; g.add(p); } }      // rótulo D475A
-  return g;
+  return halo(g);
 }
 function buildDozerConRoca() {      // wheel dozer sencillo con una roca empujada por la hoja (zona de la superficie, al autorizar)
   const g = new THREE.Group(), yel = lam(0xf2b400), dk = lam(0x1d1f22), glass = lam(0x2f4a5c), gris = lam(0x6b6f74);
@@ -123,7 +129,7 @@ function buildDozerConRoca() {      // wheel dozer sencillo con una roca empujad
   cyl(g, 0.2, 0.2, 0.3, bas(0xffb000), 0, 4.1, -1.3);        // baliza
   const roca = new THREE.Mesh(rockGeo, lam(0x7a6a58)); roca.scale.set(1.8, 1.4, 1.8); roca.position.set(0, 1.0, 5.6); g.add(roca);
   g.scale.set(0.85, 0.85, 0.6);      // más ancho y alto que antes; largo igual
-  return g;
+  return halo(g);
 }
 
 export { buildWheelDozer, buildTrackDozer, buildDozerConRoca };
