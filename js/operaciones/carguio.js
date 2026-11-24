@@ -1,7 +1,7 @@
 // Carguío y apoyo sobre los pisos reales del plano (PISOS_DWG): palas de cables cargando camiones en los frentes (mkLoadZone), pala hidráulica PC9000, wheel dozers (addDozer, workSite),
 // canchas de perforación con pozos y perforadoras (buildDrills), huellas de camiones (drawTracks) y su animación (animOps). Se arma con buildDrills y buildOps desde main.js.
 import { mundo as M, setWorldPose } from '../mundo.js';
-import { LANE, TAU } from '../config/diseno.js';
+import { LANE, TAU, WR } from '../config/diseno.js';
 import { CAMINOS_DWG, PISOS_DWG } from '../datos/terreno_dwg.js';
 import { hash, sdPoly, sm01 } from '../comun/mates.js';
 import { addPlates, lam, rockGeo } from '../modelos/materiales.js';
@@ -9,10 +9,11 @@ import { CAEX_PLATE, nextCaexId, protoOnc } from '../modelos/camiones.js';
 import { buildHydShovel, buildShovel, dumpTune, hydPose, makePile, shovelPose } from '../modelos/palas.js';
 import { buildCrawlerDrill, buildDrill, nextDrillNum } from '../modelos/perforadoras.js';
 import { buildWheelDozer } from '../modelos/dozers.js';
+import { buildMotoniveladora } from '../modelos/motoniveladora.js';
 import { floorPath, gdAt, onRoadC } from './malla.js';
 
 const SHOV_T = 7.2;      // ciclo de la pala de cables (s): cava, gira, descarga y vuelve
-const OPS = { LZ: [], DOZ: [], HYD: null, PALAS: [], HUELLAS: [] };      // HUELLAS: puntos por donde pasan camiones (los cables los cruzan por postes)      // estado de las operaciones: palas de cables cargando (LZ), dozers (DOZ), pala hidráulica (HYD) y las palas con cable (PALAS: { x, z, fx, fz, num, cable })
+const OPS = { LZ: [], DOZ: [], HYD: null, PALAS: [], HUELLAS: [], MOTO: [] };      // HUELLAS: puntos por donde pasan camiones (los cables los cruzan por postes)      // estado de las operaciones: palas de cables cargando (LZ), dozers (DOZ), pala hidráulica (HYD) y las palas con cable (PALAS: { x, z, fx, fz, num, cable })
 const F7P = PISOS_DWG.find(p => p.f7), FONDO = PISOS_DWG.find(p => p.fondo), CANCHAS = PISOS_DWG.filter(p => p.cancha);      // piso de la partida, fondo mina y terrazas de perforación
 function addHoles(list) {      // pozos de tronadura (instanciados): boca negra con su montón de detritus
   if (!list.length) return;
@@ -43,6 +44,37 @@ function buildDrills() {      // canchas de perforación en terrazas planas junt
     const c = (k === 1 || CANCHAS.length === 1) && sitio([[aMin - 9, 0], [aMin - 7, 10], [aMin - 7, -10], [0, -40], [0, 40]]);
     if (c) { const cd = buildCrawlerDrill(nextDrillNum()); M.OBST.push({ x: c.x, z: c.z, r: 6 }); cd.position.set(c.x, M.H(c.x, c.z), c.z); cd.rotation.y = Math.atan2(ux, uz) + 0.6; M.scene.add(cd); }
   });
+}
+function bancoArriba(F, h0) {      // banco de arriba de un frente: cresta (t desde el frente hacia la pared, donde el terreno ya subió ≥ 12 m) y cota del banco
+  let tc = 0; for (let t = 12; t <= 90; t += 2) { if (M.H(F.x + F.fx * t, F.z + F.fz * t) >= h0 + 12) { tc = t; break; } }
+  if (!tc) return null; const y = M.H(F.x + F.fx * (tc + 14), F.z + F.fz * (tc + 14)); return { tc, y };
+}
+function mallaAvance(F, h0) {      // malla de tronadura sobre el banco de arriba, detrás de la cresta del frente que carga la pala (lo que se tronará después): filas paralelas a la cresta, la primera a un burden, tresbolillo 8 × 9,2 m; perforadora en un extremo
+  const Bq = bancoArriba(F, h0); if (!Bq) return;
+  const tx = -F.fz, tz = F.fx, B = 8, S = 9.2, holes = [];
+  const ok = (x, z) => Math.abs(M.H(x, z) - Bq.y) < 2.0 && !onRoadC(x, z) && (gdAt(x, z) === -1 || gdAt(x, z) > WR + 16) && !M.OBST.some(o => Math.hypot(o.x - x, o.z - z) < o.r + 4);
+  let bMin = 0, bMax = 0;
+  for (let r = 0; r < 5; r++) { const d = Bq.tc + 6 + B + r * B; for (let b = -44 + (r % 2) * S / 2; b <= 44; b += S) {
+    const x = F.x + F.fx * d + tx * b + (hash(r, b) - 0.5) * 0.6, z = F.z + F.fz * d + tz * b + (hash(b, r) - 0.5) * 0.6;
+    if (ok(x, z)) { holes.push({ x, z }); bMin = Math.min(bMin, b); bMax = Math.max(bMax, b); } } }
+  if (holes.length < 8) return;
+  addHoles(holes);
+  for (const [b, r] of [[bMax + 10, 1], [bMin - 10, 1], [bMax + 10, 3], [bMin - 10, 3], [0, 6]]) {      // perforadora en un extremo de la malla, sobre el banco
+    const d = Bq.tc + 6 + B + r * B, x = F.x + F.fx * d + tx * b, z = F.z + F.fz * d + tz * b;
+    if (ok(x, z)) { placeDrill(x, z, Math.atan2(tx, tz), false); return; } }
+}
+function frenteF7(otra) {      // otro frente de carguío en el piso de la fase 7: a 16 m del borde del piso contra una pared que sube un banco entero, lejos de la otra pala y de la ruta, con espacio atrás para los camiones
+  if (!F7P) return null; const P = F7P.poly, sd = sdPoly(P), h0 = M.H(otra ? otra.x : F7P.cx, otra ? otra.z : F7P.cz); let best = null;
+  for (let i = 0; i < P.length; i++) { const [ax, az] = P[i], [bx, bz] = P[(i + 1) % P.length], L = Math.hypot(bx - ax, bz - az); if (L < 1) continue;
+    for (let t = 4; t < L; t += 8) { const ex = ax + (bx - ax) * t / L, ez = az + (bz - az) * t / L;
+      for (const sg of [1, -1]) { const nx = sg * (bz - az) / L, nz = -sg * (bx - ax) / L, x = ex - nx * 16, z = ez - nz * 16;      // n: hacia afuera del piso
+        if (sd(x, z) > -8 || Math.abs(M.H(x, z) - h0) > 2 || onRoadC(x, z)) continue;
+        const alto = M.H(ex + nx * 12, ez + nz * 12) - h0; if (alto < 12) continue;
+        if (otra && Math.hypot(otra.x - x, otra.z - z) < 110) continue;
+        let dr = 1e9; for (let s = 0; s <= 260; s += 10) { const f = M.frame(s); dr = Math.min(dr, Math.hypot(f.x - x, f.z - z)); } if (dr < 70) continue;
+        let atras = true; for (let k = 20; k <= 50; k += 10) if (Math.abs(M.H(x - nx * k, z - nz * k) - h0) > 2.5) atras = false; if (!atras) continue;
+        const sc = alto + 0.05 * Math.min(dr, 200); if (!best || sc > best.sc) best = { x, z, fx: nx, fz: nz, sc }; } } }
+  return best;
 }
 const TOLVA_C = 2.2;      // centro de la tolva: 2,2 m detrás del origen del camión (camión escalado)
 function mkLoadZone(x, z, fx, fz, num, phOff) {      // pala de cables cargando en su frente con un camión a cada lado (alterna)
@@ -83,6 +115,7 @@ function dejaHuella(x, z, fx, fz, t) {
 }
 function borraHuellas(t) { for (const m of MARCAS) if (m && m.visible) { const a = (t - m.userData.t0) / HUELLA_T; if (a >= 1 || a < 0) m.visible = false; else m.material.opacity = 0.5 * (1 - a); } }
 function animOps(dt, tAnim) {
+  animMoto(tAnim);
   borraHuellas(tAnim);      // tAnim: reloj de animación (s)
   if (OPS.HYD) {      // pala hidráulica frontal: cava en el frente, levanta, gira 90° al camión de su costado, descarga sobre la tolva y vuelve (ciclo ~22 s; 4 pases llenan el camión)
     const Q = OPS.HYD, T = 22, ph = (tAnim + 3) % T, was = Q.prev || 0; Q.prev = ph;
@@ -118,6 +151,30 @@ function animOps(dt, tAnim) {
     D.px = nx; D.pz = nz;
   }
 }
+const MOTO_EN = [[432.0, -95.0]];      // motoniveladoras (GD955): perfilan el camino interior más cercano a cada punto (la celeste junto a la fase 7, se ve desde la partida)
+function addMotoniveladora(px, pz, ph) {      // tramo de ~130 m por el eje del camino interior más cercano, muestreado cada 2 m (x, z, tangente)
+  let best = null; for (const C of CAMINOS_DWG) for (let k = 0; k < C.length; k++) { const d = Math.hypot(C[k][0] - px, C[k][1] - pz); if (!best || d < best.d) best = { d, C, k }; }
+  if (!best || best.d > 40) return;
+  const C = best.C, cum = [0]; for (let k = 1; k < C.length; k++) cum.push(cum[k - 1] + Math.hypot(C[k][0] - C[k - 1][0], C[k][1] - C[k - 1][1]));
+  const s0 = Math.max(0, cum[best.k] - 65), s1 = Math.min(cum[cum.length - 1], s0 + 130), P = [];
+  for (let s = s0, k = 0; s <= s1; s += 2) { while (k < C.length - 2 && cum[k + 1] < s) k++; const q = (s - cum[k]) / Math.max(1e-6, cum[k + 1] - cum[k]); P.push({ x: C[k][0] + (C[k + 1][0] - C[k][0]) * q, z: C[k][1] + (C[k + 1][1] - C[k][1]) * q }); }
+  if (P.length < 10) return;
+  for (let i = 0; i < P.length; i++) { const a = P[Math.max(0, i - 3)], b = P[Math.min(P.length - 1, i + 3)], n = Math.hypot(b.x - a.x, b.z - a.z) || 1; P[i].tx = (b.x - a.x) / n; P[i].tz = (b.z - a.z) / n; }
+  const g = buildMotoniveladora(); M.scene.add(g); OPS.MOTO.push({ g, P, ph });
+}
+function animMoto(tAnim) {      // pasada hacia adelante con la hoja abajo (~7 km/h), levanta la hoja, retrocede (~13 km/h), la baja y se corre al carril siguiente
+  for (const Q of OPS.MOTO) {
+    const Lp = (Q.P.length - 1) * 2, tF = Lp / 2.0, tB = Lp / 3.6, T = tF + tB + 4, cyc = Math.floor((tAnim + Q.ph) / T), t = (((tAnim + Q.ph) % T) + T) % T, LN = [-5, -1.5, 2, 5.5], off = LN[((cyc % LN.length) + LN.length) % LN.length];      // tAnim es negativo durante la intro
+    let s, alza;
+    if (t < tF) { s = Lp * t / tF; alza = 0; } else if (t < tF + 2) { s = Lp; alza = (t - tF) / 2; } else if (t < tF + 2 + tB) { s = Lp * (1 - sm01((t - tF - 2) / tB)); alza = 1; } else { s = 0; alza = 1 - (t - tF - 2 - tB) / 2; }
+    const f = s / 2, i = Math.min(Q.P.length - 2, Math.floor(f)), q = f - i, A = Q.P[i], B = Q.P[i + 1];
+    let tx = A.tx + (B.tx - A.tx) * q, tz = A.tz + (B.tz - A.tz) * q; const n = Math.hypot(tx, tz) || 1; tx /= n; tz /= n;
+    const x = A.x + (B.x - A.x) * q - tz * off, z = A.z + (B.z - A.z) * q + tx * off;
+    setWorldPose(Q.g, x, z, tx, tz); Q.g.userData.hoja.position.y = 0.3 * alza;
+    if (Q.px !== undefined) { const mx = x - Q.px, mz = z - Q.pz, dist = Math.hypot(mx, mz), sg = mx * tx + mz * tz >= 0 ? 1 : -1; if (dist < 5) for (const w of Q.g.userData.ruedas) w.rotation.x += sg * dist / 0.82; }
+    Q.px = x; Q.pz = z;
+  }
+}
 function drawTracks(pts) {      // huellas de camión: dos surcos oscuros (ruedas) siguiendo una curva suave por el piso
   if (!pts || pts.length < 2) return;
   const c = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p.x, 0, p.z))); c.curveType = 'centripetal'; const N = Math.max(24, Math.round(c.getLength() / 3));
@@ -129,7 +186,8 @@ function drawTracks(pts) {      // huellas de camión: dos surcos oscuros (rueda
 function buildOps() {
   const front = (p, i) => (p && p.frentes[i]) || null;
   const pala = (F, num, off, cable) => { mkLoadZone(F.x, F.z, F.fx, F.fz, num, off); frontRocks(F, 40 + num.charCodeAt(0)); OPS.PALAS.push({ x: F.x, z: F.z, fx: F.fx, fz: F.fz, num, h: M.H(F.x, F.z), cable }); };
-  { const F = front(F7P, 0); if (F) pala(F, '2', 2.3, 'ruta'); }      // fase 7 (piso de la partida): pala de cables 2 con su cable por el portón de la rampa
+  const F7A = front(F7P, 0); if (F7A) pala(F7A, '2', 2.3, 'ruta');      // fase 7 (piso de la partida): pala de cables 2 con su cable por el portón de la rampa
+  const F7B = frenteF7(F7A); if (F7B) pala(F7B, '5', 1.2, 'borde');      // fase 7: pala 5 en otro frente del mismo piso (cable desde una subestación en el borde)
   { const F = front(FONDO, 0); if (F) pala(F, '1', 4.6, 'fondo'); }      // fondo mina: pala 1
   { const Q = front(FONDO, 1); if (Q) {      // fondo mina: pala hidráulica PC9000 cargando un camión a la vez a su costado
       const tx = -Q.fz, tz = Q.fx, S = buildHydShovel('4'), mx = Q.x - tx * 4.5, mz = Q.z - tz * 4.5;
@@ -146,15 +204,17 @@ function buildOps() {
       const t = { x: Q.x - Q.fx * 2.2 + tx * 12.9, z: Q.z - Q.fz * 2.2 + tz * 12.9 }, mesh = protoOnc.clone(true), pile = makePile(); mesh.add(pile); addPlates(mesh, nextCaexId(), CAEX_PLATE.f, CAEX_PLATE.r, CAEX_PLATE.s); M.scene.add(mesh); setWorldPose(mesh, t.x, t.z, -Q.fx, -Q.fz); M.OBST.push({ x: t.x, z: t.z, r: 8 });
       const chorro = new THREE.Group(), cg = new THREE.BoxGeometry(0.35, 0.35, 0.35), cm = [new THREE.MeshLambertMaterial({ color: 0x6b5a45 }), new THREE.MeshLambertMaterial({ color: 0x8a7660 }), new THREE.MeshLambertMaterial({ color: 0x4f4439 })]; for (let i = 0; i < 70; i++) { const m = new THREE.Mesh(cg, cm[i % 3]); m.scale.setScalar(0.6 + 0.9 * hash(i, 9)); chorro.add(m); } chorro.visible = false; M.scene.add(chorro);      // chorro de material que cae del balde al camión al descargar
       OPS.HYD = { S, pile, chorro, fill: 0.3, prev: 0 }; hydPose(S, 0, 5.3, -4.6, -0.2, 0); frontRocks(Q, 77); } }
-  { const MK = PISOS_DWG.find(p => p.marca), F = front(MK, 0) || front(FONDO, 2); if (F) pala(F, '5', 1.2, 'fondo'); }      // pala 5: en el frente de carguío de la terraza marcada (junto a la perforadora 403); si no hay, en el fondo
+  if (!F7B) { const MK = PISOS_DWG.find(p => p.marca), F = front(MK, 0) || front(FONDO, 2); if (F) pala(F, '5', 1.2, 'fondo'); }      // pala 5: en el frente de carguío de la terraza marcada (junto a la perforadora 403); si no hay, en el fondo
+  for (const F of [F7A, F7B]) if (F) mallaAvance(F, M.H(F.x, F.z));      // fase 7: la malla que se tronará después, sobre el banco de arriba de cada frente
   OPS.PALAS.forEach((p, k) => {      // apoyo al carguío: un wheel dozer por pala, en un paño plano al costado (fuera del giro y lejos de los camiones y de sus salidas)
     const tmp = []; for (const o of M.OBST.filter(o => o.r === 8 && Math.hypot(o.x - p.x, o.z - p.z) < 40)) for (let t = 12; t <= 110; t += 12) tmp.push({ x: o.x - p.fx * t, z: o.z - p.fz * t, r: 12 }); M.OBST.push(...tmp);
     const q = workSite(p, p.fx, p.fz, p.h, [1, -1]); M.OBST.splice(M.OBST.length - tmp.length, tmp.length); if (q) addDozer(q.x, q.z, p.fx, p.fz, 2 + k * 1.7);
   });
   for (const p of OPS.PALAS) {      // huellas de los camiones de cada pala hasta la salida de su piso (fase 7: la rampa; fondo: donde empieza su camino interior)
-    const f = M.frame(80), T = p.cable === 'ruta' ? { x: f.x, z: f.z } : (FONDO && FONDO.salida ? { x: FONDO.salida[0], z: FONDO.salida[1] } : null); if (!T) continue;
+    const f = M.frame(80), T = p.cable !== 'fondo' ? { x: f.x, z: f.z } : (FONDO && FONDO.salida ? { x: FONDO.salida[0], z: FONDO.salida[1] } : null); if (!T) continue;
     for (const o of M.OBST.filter(o => o.r === 8 && Math.hypot(o.x - p.x, o.z - p.z) < 40)) drawTracks(floorPath({ x: o.x - p.fx * 32, z: o.z - p.fz * 32 }, T));      // desde 32 m adelante de cada camión (ya fuera de la pala)
   }
+  MOTO_EN.forEach(([x, z], k) => addMotoniveladora(x, z, k * 37));      // motoniveladoras perfilando caminos interiores
   for (const C of CAMINOS_DWG) for (const off of [-LANE, LANE]) {      // huellas en todos los caminos interiores: una pista por sentido, a ±LANE como en la ruta
     const pts = []; for (let k = 0; k < C.length; k++) { const a = C[Math.max(0, k - 1)], b = C[Math.min(C.length - 1, k + 1)], tx = b[0] - a[0], tz = b[1] - a[1], n = Math.hypot(tx, tz) || 1; pts.push({ x: C[k][0] - tz / n * off, z: C[k][1] + tx / n * off }); }
     drawTracks(pts);

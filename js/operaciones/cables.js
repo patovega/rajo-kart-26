@@ -63,12 +63,14 @@ function layCable(P, out, info, libre) {      // tiende el cable sobre P: por el
   const cruza = p => onRoadC(p.x, p.z) || OPS.HUELLAS.some(h => (h.x - p.x) ** 2 + (h.z - p.z) ** 2 < 64);      // un camino, o una huella de camiones en un piso: ahí va el par de postes pasacables
   const F = P.map(p => cruza(p) && !(libre && Math.hypot(p.x - libre.x, p.z - libre.z) < libre.r));      // libre: zona sin postes (explanada de la SEM 6: el cable va por el suelo)
   { let k = 0; while (k < F.length) { if (F[k]) { k++; continue; } let j = k, L = 0; while (j < F.length && !F[j]) { if (j > k) L += Math.hypot(P[j].x - P[j - 1].x, P[j].z - P[j - 1].z); j++; } if (k > 0 && j < F.length && L < 45) for (let q = k; q < j; q++) F[q] = true; k = j; } }      // cruces seguidos (huellas y caminos a < 45 m uno de otro): un solo tramo por arriba, no un par de postes por cada uno
+  { let k = 0; while (k < F.length) { if (!F[k]) { k++; continue; } let j = k, L = 0; while (j < F.length && F[j]) { if (j > k) L += Math.hypot(P[j].x - P[j - 1].x, P[j].z - P[j - 1].z); j++; } if (L < 16) for (let q = k; q < j; q++) F[q] = false; k = j; } }      // roce de menos de 16 m con la orilla de un camino o piso: el cable sigue por el suelo (no un par de postes a 8 m)
   let i = 0, n = 0;
   while (i < P.length) {
     const p = P[i];
     if (!F[i]) { out.push(new THREE.Vector3(p.x, M.H(p.x, p.z) + 0.35, p.z)); if (n++ % 2 === 0) M.OBST.push({ x: p.x, z: p.z, r: 1.2 }); info.ground.push(p); i++; continue; }
     let j = i; while (j < P.length && F[j]) j++;
-    const a = j - 1 > i ? P[i] : P[Math.max(0, i - 1)], b = j - 1 > i ? P[j - 1] : P[Math.min(P.length - 1, j)];      // postes justo en cada orilla del tramo
+    const cerca = q => { const o = M.OBST.find(o => o.r === 1.6 && Math.hypot(o.x - q.x, o.z - q.z) < 32); return o ? { x: o.x, z: o.z } : q; };      // si ya hay un poste a < 32 m (p. ej. los del portón), el cable sube por ese: no un poste nuevo al lado
+    const a = cerca(j - 1 > i ? P[i] : P[Math.max(0, i - 1)]), b = cerca(j - 1 > i ? P[j - 1] : P[Math.min(P.length - 1, j)]);      // postes justo en cada orilla del tramo
     const seg = [a]; let acc = 0; for (let k = i + 1; k < j - 1; k++) { acc += Math.hypot(P[k].x - P[k - 1].x, P[k].z - P[k - 1].z); if (acc >= 55 && Math.hypot(b.x - P[k].x, b.z - P[k].z) > 20) { seg.push(P[k]); acc = 0; } } seg.push(b);
     out.push(new THREE.Vector3(a.x, M.H(a.x, a.z) + 0.6, a.z), new THREE.Vector3(a.x, M.H(a.x, a.z) + CTOP, a.z));
     for (let k = 0; k < seg.length - 1; k++) { const s = seg[k], e = seg[k + 1]; cablePost(s.x, s.z, e.x - s.x, e.z - s.z); cablePost(e.x, e.z, e.x - s.x, e.z - s.z); info.posts.push(s, e); cableSpan(out, s, e, 12); }
@@ -106,6 +108,7 @@ function buildPowerLine() {      // cable de la pala 2 (fase 7): de SEM 6 y su s
   const avoid = [];      // por donde circulan: la entrada del portón y las salidas de los camiones de la pala
   for (let al = gc - gw + 3; al <= gc + gw - 3; al += 4) for (let la = 0; la <= 34; la += 6) { const q = pl(al, la); avoid.push({ x: q.x, z: q.z, r: 6 }); }
   for (const o of M.OBST.filter(o => o.r === 8 && Math.hypot(o.x - Q.x, o.z - Q.z) < 40)) for (let t = 12; t <= 110; t += 12) avoid.push({ x: o.x - Q.fx * t, z: o.z - Q.fz * t, r: 10 });
+  cablePost(G1.x, G1.z, G2.x - G1.x, G2.z - G1.z); cablePost(G2.x, G2.z, G2.x - G1.x, G2.z - G1.z);      // los postes del portón primero: los cruces vecinos los comparten
   const B = rimPoint(G1); substation(B);      // subestación móvil en la superficie, sobre la fase 7
   const out = [new THREE.Vector3(B.x, M.H(B.x, B.z) + 1.2, B.z)];
   layCable(cableRoute(B, pl(gc + gw + 3, 26), avoid), out, info);
@@ -123,13 +126,13 @@ function buildCable2() {      // palas del fondo: SEM 6 junto a la tercera curva
   let S6 = null, sala = null;
   if (SEM6_DWG) { const A = { x: SEM6_DWG.x, z: SEM6_DWG.z }, rot = SEM6_DWG.rot, c = Math.cos(rot), sn = Math.sin(rot); sem6(A, rot); S6 = A;      // la SEM 6 es la subestación: los cables salen del mismo remolque
     sala = { A, w: (lx, lz) => ({ x: A.x + lx * c - lz * sn, z: A.z + lx * sn + lz * c }) }; }      // w: punto en coordenadas de la sala (x a lo largo, z a lo ancho)
-  for (const Q of OPS.PALAS.filter(p => p.cable === 'fondo')) {
+  for (const Q of OPS.PALAS.filter(p => p.cable === 'fondo' || p.cable === 'borde')) {      // 'borde': pala de la fase 7 con su propia subestación móvil en el borde
     const info = { ground: [], posts: [] }, avoid = [];
     for (const o of M.OBST.filter(o => o.r === 8 && Math.hypot(o.x - Q.x, o.z - Q.z) < 40)) for (let t = 12; t <= 110; t += 12) avoid.push({ x: o.x - Q.fx * t, z: o.z - Q.fz * t, r: 10 });
-    const A = S6 || rimPoint(Q); if (!S6) substation(A);
+    const S6q = Q.cable === 'fondo' ? S6 : null, A = S6q || rimPoint(Q); if (!S6q) substation(A);
     const out = [new THREE.Vector3(A.x, M.H(A.x, A.z) + 1.2, A.z)], back = { x: Q.x - Q.fx * 18 + Q.fz * 6, z: Q.z - Q.fz * 18 - Q.fx * 6 };
     let ini = A, libre = null;
-    if (sala) {      // el cable sale del extremo del remolque de la SEM 6 que mira a la pala; en la explanada no hay postes
+    if (sala && S6q) {      // el cable sale del extremo del remolque de la SEM 6 que mira a la pala; en la explanada no hay postes
       const ends = [sala.w(7.6, 0), sala.w(-8.6, 0.9)], e2 = ends.sort((a, b) => Math.hypot(a.x - back.x, a.z - back.z) - Math.hypot(b.x - back.x, b.z - back.z))[0];
       out.length = 0; out.push(new THREE.Vector3(e2.x, M.H(e2.x, e2.z) + 1.4, e2.z), new THREE.Vector3(e2.x, M.H(e2.x, e2.z) + 0.3, e2.z));      // sale del extremo del remolque, por el suelo
       ini = e2; libre = { x: sala.A.x, z: sala.A.z, r: 35 }; }

@@ -16,7 +16,7 @@ paso('terreno: malla 3D con colores', () => {
     const xm = GH[iz * GNX + Math.max(0, ix - 1)], xp = GH[iz * GNX + Math.min(GNX - 1, ix + 1)], zm = GH[Math.max(0, iz - 1) * GNX + ix], zp = GH[Math.min(GNZ - 1, iz + 1) * GNX + ix];
     const sl = Math.hypot(xp - xm, zp - zm) / (2 * CELL);
     if (d === -1 && !GR[i]) c.setHex(0x6f675c).multiplyScalar(0.88 + 0.22 * n);          // pisos del rajo: gris, distinto al camino
-    else if ((d >= 0 && d < WR + 2) || GR[i]) c.setHex(0x9a8566).multiplyScalar(0.93 + 0.14 * n);      // calzada: la rampa principal y todos los caminos interiores, del mismo color
+    else if ((d >= 0 && d < WR + 2) || GR[i]) c.setHex(0x85704f).lerp(c2.setHex(0x6e5a40), 0.25 + 0.3 * n);      // calzada: la rampa principal y todos los caminos interiores, del color de la ruta
     else if (fuera && sl < 0.45) c.setHex(0xc3ac84).multiplyScalar(0.94 + 0.12 * n);      // superficie (fuera del rajo)
     else if (sl > 0.45) {                                  // cara de banco
       c.setHex(0x6a4a36).lerp(c2.setHex(0x8f5c3a), 0.5 + 0.5 * Math.sin(h * 0.9 + n2 * 4));
