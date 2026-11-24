@@ -17,6 +17,6 @@ window.addEventListener('keyup', e => { const k = keyMap[e.key]; if (k) keys[k] 
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 document.querySelectorAll('[data-k]').forEach(b => {
   const k = b.dataset.k;
-  b.addEventListener('pointerdown', e => { e.preventDefault(); keys[k] = true; b.classList.add('on'); });
-  ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => b.addEventListener(ev, () => { keys[k] = false; b.classList.remove('on'); }));
+  b.addEventListener('pointerdown', e => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (x) {} keys[k] = true; b.classList.add('on'); });      // con captura: el dedo puede moverse un poco sin soltar el botón (antes se soltaba solo y no se aceleraba)
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => b.addEventListener(ev, () => { keys[k] = false; b.classList.remove('on'); }));
 });

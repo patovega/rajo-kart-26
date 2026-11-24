@@ -15,6 +15,8 @@ Juego web de conducción por el rajo de una mina (Sierra Gorda, Chile). Todo el 
 ## Modos de juego (24-11-2026)
 - Pantalla de inicio con dos botones (`goBtn` = karting, `simBtn` = simulador); `G.modo` = `'kart'` | `'sim'`; con el nombre «federicovega» cualquiera de los dos va en modo prueba (admin).
 - **Modo karting** (carrera, va al ranking): en la camioneta (se probó un kart y el usuario prefirió la camioneta), de la fase intermedia a la meta `KART.S` (`reglas.js`: punto de la ruta más cercano a (1076,1; −493,6), s ≈ 4042; el punto mismo está 150 m fuera de la ruta, en el camino interior que la cruza). 45 km/h sola, hasta 110 con el acelerador, acelera y frena más fuerte, con la misma dirección de siempre (vuelve sola a su pista). Sin autorizaciones ni límite de velocidad, distancia mínima, carril CAEX ni pista contraria; se pierde por choques, aplastamiento, pretil/caída, cable y cordón de la motoniveladora. Cámara más baja, campo visual que se abre con la velocidad y líneas de velocidad (`#veloz`). La barra de velocidad llega a 120 y la distancia es hasta la meta.
+- Tránsito libre (karting): bajar por un talud de más de ~27° (1,5 m en 3 m) es caída y se pierde; en el simulador y en modo prueba solo se frena.
+- Celular: el minimapa va sobre el volante en pantalla (150 px; 128 px en horizontal); los botones táctiles capturan el dedo (no se sueltan solos al moverlo).
 - **Modo simulador**: recorrido libre por toda la mina en la camioneta (`G.free` nunca se amarra a la ruta, sin portón); pasar sobre un cable solo avisa; no va al ranking; botón «Terminar recorrido» (`simFin`) vuelve al inicio.
 - Nombres en pantalla: la fase 7 se llama «fase intermedia» y la fase 6 «fondo mina» (pedido del usuario; en el código siguen F7/fondo).
 

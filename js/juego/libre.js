@@ -32,7 +32,7 @@ const cableBajo = (x, z) => OBST.some(o => o.r === 1.2 && Math.hypot(o.x - x, o.
 function stepFree(dt) {      // tránsito libre por el piso de la fase 7 (sin pistas ni reglas): se toma la Rampa Sur al llegar a ella
   const F = G.free, thr = Math.max(keys.up ? 1 : 0, inp.thr), brk = Math.max(keys.down ? 1 : 0, inp.brk);
   const vt = G.modo === 'kart' ? 12.5 + 18 * thr : 8.3 + (G.TEST ? 13.9 : 5.6) * thr;      // camioneta: 30 km/h sola, hasta 50 con ↑ o el pedal (80 en modo prueba); kart: 45 y hasta 110
-  let acc; if (brk > 0.05) acc = -7 * brk; else if (P.v < vt) acc = Math.min(2.8, (vt - P.v) * 2.5 + 0.2); else acc = -Math.min(1.5, (P.v - vt) * 4);
+  let acc; if (brk > 0.05) acc = -7 * brk; else if (P.v < vt) acc = Math.min(G.modo === 'kart' ? 6 : 2.8, (vt - P.v) * 2.5 + 0.2);      // en el karting acelera igual de fuerte fuera del camino else acc = -Math.min(1.5, (P.v - vt) * 4);
   P.v = clamp(P.v + acc * dt, 0, Math.max(VTOP, vt));
   const kbs = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), steer = kbs || (inp.analog && Math.abs(inp.steer) > 0.05 ? inp.steer : 0);
   F.a += steer * Math.max(0.7, Math.min(P.v / 9, 1.3, 16 / Math.max(P.v, 1))) * dt;      // a más de ~60 km/h gira más suave (no se descontrola)      // también gira detenida, para salir de un talud
@@ -48,6 +48,7 @@ function stepFree(dt) {      // tránsito libre por el piso de la fase 7 (sin pi
   if (G.modo === 'sim' && cableBajo(nx, nz) && !(G.bannerT > 0)) { setBanner('¡Ojo! Pasaste sobre un cable eléctrico.', 'warn'); G.bannerT = 2; }      // simulador: solo el aviso
   if (!G.TEST && G.modo !== 'sim' && cableBajo(nx, nz)) { F.x = nx; F.z = nz; P.v = 0; return endGame(false, 'Pasaste sobre el cable eléctrico.'); }      // federicovega (modo prueba) pasa sin consecuencias
   if (gateMsg) { P.v = 0; setBanner('Entra a la Rampa Sur por entre los postes pasacables.', 'warn'); G.bannerT = 2; }
+  else if (!G.TEST && G.modo !== 'sim' && P.v > 1 && H(F.x + hx * 3, F.z + hz * 3) < H(F.x, F.z) - 1.5) { F.x = nx; F.z = nz; G.shake = 1; return endGame(false, 'Te tiraste por el talud y caíste banco abajo.'); }      // talud hacia abajo (> ~27°): es una caída (en el simulador solo se frena)
   else if (freeBlocked(nx, nz, hx, hz)) { if (P.v > 3) { beep(90, 0.18, 'sawtooth', 0.06); G.shake = Math.max(G.shake, 0.3); } P.v = 0; }
   else { F.x = nx; F.z = nz; }
   if (G.TEST || G.modo === 'sim') return;      // modo prueba y simulador: recorrido libre por toda la mina (no se amarra a la Rampa Sur)

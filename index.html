@@ -146,6 +146,8 @@ body.tilt-on #wheel{pointer-events:auto}
 body.vw-on #vwheel{display:block}
 body.vw-on #wheel{display:none!important}
 @media (pointer:coarse) and (max-height:520px){#vwheel{width:112px;height:112px}}
+@media (pointer:coarse){#mapa{display:block;position:fixed;left:calc(4px + env(safe-area-inset-left,0px));bottom:calc(150px + env(safe-area-inset-bottom,0px));width:150px;height:150px;z-index:5}}      /* celular: el mapa va sobre el volante en pantalla */
+@media (pointer:coarse) and (max-height:520px){#mapa{width:128px;height:128px;bottom:calc(126px + env(safe-area-inset-bottom,0px))}}
 #cdNum{font-size:84px;font-weight:800;line-height:1.1}
 /* cuenta 3-2-1-¡YA! estilo bloques de colores, con el fondo transparente para ver el rajo y la pista */
 #cdown.transp{background:transparent}
