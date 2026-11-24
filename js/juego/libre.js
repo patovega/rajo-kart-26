@@ -1,7 +1,7 @@
 // Tránsito libre por el piso de la fase 7 antes de tomar la Rampa Sur: punto de partida (buscarPartidaLibre), obstáculos (taludes, pilas, equipos) y el portón entre los postes pasacables (stepFree).
 import { CRASH_U, TAU, VTOP } from '../config/diseno.js';
 import { clamp } from '../comun/mates.js';
-import { CELL, GD, GNX, GNZ, GX0, GZ0, H, START_S, f7h, frame, inF7 } from '../terreno/construir.js';
+import { CELL, GD, GNX, GNZ, GX0, GZ0, H, L, START_S, f7h, frame, inF7 } from '../terreno/construir.js';
 import { onRoadC } from '../operaciones/malla.js';
 import { G, OBST, P, endGame, inp, keys } from './estado.js';
 import { beep } from '../ui/sonido.js';
@@ -35,7 +35,7 @@ function stepFree(dt) {      // tránsito libre por el piso de la fase 7 (sin pi
   let acc; if (brk > 0.05) acc = -7 * brk; else if (P.v < vt) acc = Math.min(2.8, (vt - P.v) * 2.5 + 0.2); else acc = -Math.min(1.5, (P.v - vt) * 4);
   P.v = clamp(P.v + acc * dt, 0, Math.max(VTOP, vt));
   const kbs = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), steer = kbs || (inp.analog && Math.abs(inp.steer) > 0.05 ? inp.steer : 0);
-  F.a += steer * Math.max(0.7, Math.min(P.v / 9, 1.3)) * dt;      // también gira detenida, para salir de un talud
+  F.a += steer * Math.max(0.7, Math.min(P.v / 9, 1.3, 16 / Math.max(P.v, 1))) * dt;      // a más de ~60 km/h gira más suave (no se descontrola)      // también gira detenida, para salir de un talud
   const hx = Math.cos(F.a), hz = Math.sin(F.a), nx = F.x + hx * P.v * dt, nz = F.z + hz * P.v * dt;
   let gateMsg = false;
   if (M.GATE && !F.gate && !G.TEST && G.modo !== 'sim') {      // solo se llega a la Rampa Sur pasando entre los postes pasacables
@@ -52,12 +52,13 @@ function stepFree(dt) {      // tránsito libre por el piso de la fase 7 (sin pi
   else { F.x = nx; F.z = nz; }
   if (G.TEST || G.modo === 'sim') return;      // modo prueba y simulador: recorrido libre por toda la mina (no se amarra a la Rampa Sur)
   // ¿llegó a la Rampa Sur? (tramo junto a la fase 7)
-  let bs = null; for (let s = START_S; s < START_S + 260; s += 2) { const f = frame(s), d = (f.x - F.x) ** 2 + (f.z - F.z) ** 2; if (!bs || d < bs.d) bs = { s, d, f }; }
+  const s0 = F.sHint !== undefined ? Math.max(START_S, F.sHint - 300) : START_S, s1 = F.sHint !== undefined ? Math.min(L - 2, F.sHint + 300) : START_S + 260;      // cerca de donde salió del camino (o la Rampa Sur al comienzo)
+  let bs = null; for (let s = s0; s < s1; s += 2) { const f = frame(s), d = (f.x - F.x) ** 2 + (f.z - F.z) ** 2; if (!bs || d < bs.d) bs = { s, d, f }; }
   const f = bs.f, u = (F.x - f.x) * f.rx + (F.z - f.z) * f.rz;
   if ((F.gate || !M.GATE) && Math.abs(u) < CRASH_U - 2.5 && Math.abs((F.x - f.x) * f.tx + (F.z - f.z) * f.tz) < 3) {
     const along = hx * f.tx + hz * f.tz, side = hx * f.rx + hz * f.rz;
     Object.assign(P, { s: bs.s, u, v: P.v * Math.max(0.4, along), vu: P.v * side * 0.5 }); G.free = null; G.camSnap = false;
-    setBanner('Tomaste la Rampa Sur. ¡Circula por la izquierda!', 'ok'); G.bannerT = 2.5;
+    setBanner(F.sHint !== undefined ? 'Volviste al camino.' : 'Tomaste la Rampa Sur. ¡Circula por la izquierda!', 'ok'); G.bannerT = 2.5;
   }
 }
 

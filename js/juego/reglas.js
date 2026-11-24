@@ -1,9 +1,9 @@
 // Reglas del juego: resetGame arma una partida (tráfico, rocas, aljibe y camino mojado) y step(dt) la simula: tráfico, rocas, salida automática, tránsito libre, la camioneta (velocidad, dirección, piso mojado) y las reglas (pretil, carril CAEX, choques, distancia al CAEX, adelantamientos, pista contraria, meta).
-import { CRASH_U, CRUISE, FOLLOW_DIST, LANE, SPEED_LIMIT, VTOP } from '../config/diseno.js';
+import { CRASH_U, CRUISE, FOLLOW_DIST, LANE, PRET, SPEED_LIMIT, VTOP } from '../config/diseno.js';
 import { clamp } from '../comun/mates.js';
 import { nextCaexId, resetCaexIds } from '../modelos/camiones.js';
 import { scene } from '../escena.js';
-import { CAEX_LANE, H, L, PLAT, START_S, START_U0, frame, seedWet, slickNow, updateRoad } from '../terreno/construir.js';
+import { CAEX_LANE, H, L, PLAT, START_S, START_U0, frame, inGap, isDrop, seedWet, slickNow, updateRoad } from '../terreno/construir.js';
 import { pad } from '../comun/texto.js';
 import { G, P, endGame, inp, keys, oncs, pickup, rocasPista, rocks, trucks } from './estado.js';
 import { beep } from '../ui/sonido.js';
@@ -70,11 +70,10 @@ function step(dt) {
   const kbs = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), asteer = inp.analog && Math.abs(inp.steer) > 0.05 ? inp.steer : 0;
   const steer = kbs || asteer, grip = Math.min(1, P.v / 2.5), kmhNow = P.v * 3.6;
   let target;
-  if (steer) target = steer * (K ? 9 : 5.2) * grip * (1 - 0.3 * slick);      // el kart dobla rápido y no vuelve solo a su pista (solo se endereza un poco)
-  else if (K) target = P.vu * 0.85;
+  if (steer) target = steer * 5.2 * grip * (1 - 0.3 * slick);      // dirección igual en los dos modos (el karting solo cambia la velocidad)
   else { const c = P.u < 0 ? -LANE : LANE; target = clamp((c - P.u) * 1.0, -2.5, 2.5) * grip * (1 - 0.5 * slick); }
-  P.vu += (target - P.vu) * (1 - Math.exp(-dt * ((K ? 10 : 7) - 4.6 * slick)));
-  if (slick > 0.05 && kmhNow > 30) {      // se patina: la camioneta se desliza de lado, más al frenar o girar fuerte
+  P.vu += (target - P.vu) * (1 - Math.exp(-dt * (7 - 4.6 * slick)));
+  if (slick > 0.05 && kmhNow > 30 && !K) {      // en el karting no se cruza de lado en el mojado (se descontrolaba a alta velocidad)      // se patina: la camioneta se desliza de lado, más al frenar o girar fuerte
     const amp = slick * Math.min(1.6, (kmhNow - 30) / 35) * (1 + (brk > 0.05 ? 0.8 : 0) + Math.abs(steer) * 0.4);
     P.vu += (Math.sin(G.tGame * 2.3) + 0.6 * Math.sin(G.tGame * 3.9 + 1)) * 6 * amp * dt;
   }
@@ -85,6 +84,11 @@ function step(dt) {
 
   // Reglas
   const kmh = P.v * 3.6;
+  if (Math.abs(P.u) > CRASH_U && (!isDrop(P.s, Math.sign(P.u) * PRET) || inGap(P.s, Math.sign(P.u) * PRET))) {      // de ese lado no hay pretil: no cae (banco, cerro o el piso de una fase) o es la abertura de una explanada
+    const sg = Math.sign(P.u), f = frame(P.s), x = f.x + f.rx * P.u, z = f.z + f.rz * P.u, a = Math.atan2(f.tz * P.v + f.rz * P.vu, f.tx * P.v + f.rx * P.vu), nx = x + Math.cos(a) * 4, nz = z + Math.sin(a) * 4;
+    if (Math.abs(H(nx, nz) - H(x, z)) < 2.2) { G.free = { x, z, a, gate: true, sHint: P.s }; P.vu = 0; setBanner('Saliste del camino.', 'warn'); G.bannerT = 1.5; return; }      // terreno parejo: sigue en tránsito libre (vuelve al camino al entrar a la calzada)
+    P.u = sg * CRASH_U; P.vu = 0; if (P.v > 3) { beep(90, 0.18, 'sawtooth', 0.06); G.shake = Math.max(G.shake, 0.3); } P.v = Math.min(P.v, 2);      // talud o pared: se detiene contra el cerro (no hay caída)
+  }
   if (Math.abs(P.u) > CRASH_U) {
     G.crashSide = P.u < 0 ? -1 : 1; G.crashT = 0;
     const cf = frame(P.s); G.crashFall = H(cf.x + cf.rx * G.crashSide * 20, cf.z + cf.rz * G.crashSide * 20) < H(cf.x, cf.z) - 3;      // ¿el terreno de ese lado cae al rajo?

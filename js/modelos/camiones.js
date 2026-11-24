@@ -96,6 +96,8 @@ function buildPickup(bodyC, other) {      // Toyota Hilux doble cabina 4×4 de f
     for (let k = 0; k < 5; k++) { const a = k * Math.PI * 2 / 5 + 0.3; const sp = box(wg, 0.035, 0.17, 0.055, lam(0x80858b), XF, WR0 + Math.cos(a) * 0.115, z + Math.sin(a) * 0.115); sp.rotation.x = a;      // 5 rayos
       cyl(wg, 0.014, 0.014, 0.05, bas(0xd8e02a), XF + sx * 0.01, WR0 + Math.cos(a + 0.62) * 0.07, z + Math.sin(a + 0.62) * 0.07, Math.PI / 2); }      // tuercas con indicador amarillo
   }
+  for (const z of [ZF, ZR]) { const ax = new THREE.Group(); ax.name = 'eje'; ax.position.set(0, WR0, z);      // cada eje en su grupo, centrado en la rueda: así giran (updateVisuals)
+    for (const c of [...wg.children]) if (!c.isGroup && Math.abs(c.position.z - z) < 0.6) { c.position.y -= WR0; c.position.z -= z; ax.add(c); } wg.add(ax); }
   // rack negro tras la cabina (protector de luneta): dos montantes hasta el techo, travesaños, tirantes inclinados hacia la tolva
   { const RZ = ZC - 0.16, RH = ROOF + 0.06 - BELT;
     for (const sx of [-1, 1]) { cyl(g, 0.04, 0.04, RH, plast, sx * 0.74, BELT + RH / 2, RZ); const br = cyl(g, 0.035, 0.035, 0.95, plast, sx * 0.74, BELT + 0.31, RZ - 0.36); br.rotation.x = 0.86; }
@@ -125,8 +127,9 @@ function buildPickup(bodyC, other) {      // Toyota Hilux doble cabina 4×4 de f
 function truckBase(g, bodyC, ws = 1) {      // ws: el camión se escala 1,1 a lo ancho y largo; las ruedas se compensan para quedar redondas (Ø ~4 m)      // camión minero de 300 t: llantas amarillas, cubierta delantera con barandas, cabina a la izquierda, radiador al centro con escalera diagonal, estanque entre ruedas
   const body = lam(bodyC, { map: grimeTex }), dark = lam(0x222426), steel = lam(0x585c60), tire = lam(0x353330), glass = lam(0x1d2a36), lime = bas(0xc8e61a), rail = lam(0x1a1a1a), cabC = lam(0x2a2c2e);
   box(g, 2.8, 1.1, 11, body, 0, 3.3, 0);      // bastidor
-  const WY = 1.8 * ws, wheel = (x, z, wd) => { const t = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, wd, 24), TIRE_MATS); t.position.set(x, WY, z); t.rotation.z = Math.PI / 2; t.scale.x = ws; g.add(t);
-    const r = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, wd + 0.06, 24), rimMats(bodyC)); r.position.set(x, WY, z); r.rotation.z = Math.PI / 2; r.scale.x = ws; g.add(r); const hb = cyl(g, 0.2, 0.2, wd + 0.2, body, x, WY, z, Math.PI / 2); hb.scale.x = ws; };      // llanta grande amarilla con dibujo y maza
+  const WY = 1.8 * ws, ejes = {}, eje = z => { if (!ejes[z]) { const a = new THREE.Group(); a.name = 'eje'; a.position.set(0, WY, z); g.add(a); ejes[z] = a; } return ejes[z]; };      // cada eje en su grupo: las ruedas giran (updateVisuals)
+  const wheel = (x, z, wd) => { const A = eje(z), t = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, wd, 24), TIRE_MATS); t.position.set(x, 0, 0); t.rotation.z = Math.PI / 2; t.scale.x = ws; A.add(t);
+    const r = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, wd + 0.06, 24), rimMats(bodyC)); r.position.set(x, 0, 0); r.rotation.z = Math.PI / 2; r.scale.x = ws; A.add(r); const hb = cyl(A, 0.2, 0.2, wd + 0.2, body, x, 0, 0, Math.PI / 2); hb.scale.x = ws; };      // llanta grande amarilla con dibujo y maza
   wheel(3.05, 3.6, 1.9); wheel(-3.05, 3.6, 1.9);
   for (const sx of [1, -1]) { wheel(sx * 1.9, -3.4, 1.45); wheel(sx * 3.5, -3.4, 1.45); }      // duales anchas con espacio entre ellas
   box(g, 3.4, 1.4, 1.4, body, 0, 1.8, -3.4);                           // puente trasero

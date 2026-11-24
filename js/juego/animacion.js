@@ -71,6 +71,10 @@ function updateVisuals(dt) {
       PERT.w += (70 * (tgt - PERT.a) - 7 * PERT.w) * h; PERT.a += PERT.w * h; PERT.wz += (70 * (tz - PERT.z) - 7 * PERT.wz) * h; PERT.z += PERT.wz * h;
       pe.rotation.x = PERT.a; pe.rotation.z = PERT.z; } }
   const pb = pickup.getObjectByName('beacon'); if (pb) pb.material.color.setHex(Math.sin(G.tAnim * 7) > 0 ? 0x3d8bff : 0x0a1c4d);
+  const ejes = m => m.userData.ejes || (m.userData.ejes = (() => { const a = []; m.traverse(o => { if (o.name === 'eje') a.push(o); }); return a; })());      // ruedas que giran con la velocidad
+  for (const e of ejes(pickup)) e.rotation.x += P.v * dt / 0.44;
+  for (const t of trucks) if (t.kind !== 'moto') for (const e of ejes(t.mesh)) e.rotation.x += (t.v || 0) * dt / 1.8;
+  for (const o of oncs) for (const e of ejes(o.mesh)) e.rotation.x += (o.v || 0) * dt / (o.kind === 'pickup' ? 0.44 : 1.8);
   for (const t of trucks) { place(t.mesh, t.s, t.u + (t.off || 0), 1, 0); if (t.beacon) blink(t.beacon, t.auth);
     if (t.kind === 'moto') {      // motoniveladora: ruedas, hoja abajo mientras nivela (arriba si se detuvo) y el cordón hasta la punta de la hoja
       const ds = t.s - (t.sv ?? t.s); t.sv = t.s; if (Math.abs(ds) < 5) for (const w of t.mesh.userData.ruedas) w.rotation.x += ds / 0.82;
