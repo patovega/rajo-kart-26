@@ -18,7 +18,8 @@ function horizontal() {      // en el celular: pantalla completa y bloqueo en ho
   try { if (!coarseMq.matches) return; const d = document.documentElement; const bloquear = () => { try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) {} };
     if (d.requestFullscreen && !document.fullscreenElement) d.requestFullscreen().then(bloquear).catch(() => bloquear()); else bloquear(); } catch (e) {}
 }
-function tryStart() {      // el nombre es obligatorio para jugar
+function tryStart(modo) {      // el nombre es obligatorio para jugar; modo: 'kart' (carrera) o 'sim' (simulador)
+  if (modo === 'kart' || modo === 'sim') G.modo = modo;
   const n = cleanName($('pname').value);
   const test = norm(n).replace(/\s/g, '') === 'federicovega';
   if (!test && !nombreValido(n)) {
@@ -49,7 +50,7 @@ const wasted = (() => {      // pantalla «FALLASTE» estilo GTA (WASTED): fondo
 function terminarPartida(win, msg) {      // fin de la partida: pantalla de resultado, señal de la regla incumplida, captura del choque y envío al ranking
   if (G.mode !== 'play') return;
   G.mode = win ? 'win' : 'over'; stopEngine(); renderAlerts([]);
-  $('endTitle').textContent = win ? '¡Llegaste a la superficie!' : 'Fin del juego';
+  $('endTitle').textContent = win ? (G.modo === 'kart' ? '¡Llegaste a la meta!' : '¡Llegaste a la superficie!') : 'Fin del juego';
   $('endMsg').textContent = msg;
   const sg = win ? '' : signOf(msg); $('signBox').hidden = !sg; $('signTxt').textContent = sg;
   $('shotImg').hidden = true; pantalla.pendingShot = !win && (G.crashFall || G.crush || /roca|camión|Choque frontal|aplast/.test(msg));
@@ -64,12 +65,15 @@ function startGame() {
   wasted.hidden = true;
   audioStart();
   resetGame(); G.overT = 0; G.mode = 'play'; stopEngine(); startEngine();
-  liveStart();
+  if (G.modo !== 'sim') liveStart();      // el simulador no va al ranking
+  $('simFin').hidden = G.modo !== 'sim';
   if (tilt.on && tilt.ang != null) { tilt.neutral = tilt.ang; tilt.sm = 0; }      // el celular se calibra con la posición con que empiezas
   el.ovStart.hidden = true; el.ovEnd.hidden = true; el.hud.hidden = false;
   el.radio.style.display = 'none'; G.camSnap = true;
 }
-$('goBtn').addEventListener('click', tryStart);
+$('goBtn').addEventListener('click', () => tryStart('kart'));
+$('simBtn').addEventListener('click', () => tryStart('sim'));
+$('simFin').addEventListener('click', () => { resetGame(); G.mode = 'menu'; stopEngine(); el.ovEnd.hidden = true; el.ovStart.hidden = false; el.hud.hidden = true; $('simFin').hidden = true; });      // terminar el recorrido libre: vuelve al inicio
 $('retryBtn').addEventListener('click', () => { horizontal(); launch(); });
 
 function launch() {      // cuenta 3-2-1-¡YA! como en Mario Kart; la camioneta no se mueve hasta el ¡YA!

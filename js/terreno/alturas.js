@@ -47,12 +47,13 @@ paso('terreno: distancia a la ruta, calzada excavada, piso de la fase 7 y patio 
     }
     const i = iz * GNX + ix; GD[i] = bi >= 0 ? Math.sqrt(best) : 999; GI[i] = Math.max(0, bi);
   }
-  const fd = frame(L + 40), dcx = fd.x + fd.rx * -44, dcz = fd.z + fd.rz * -44, hL = hr[Math.min(NS, Math.round(L))];      // patio del domo mirador (frente al final de la ruta)
+  const fd = frame(L), hL = hr[Math.min(NS, Math.round(L))];      // patio del domo mirador y del estacionamiento de camiones: rectángulo plano al lado izquierdo de la ruta, de s = L − 25 a L + 215 y de u = −72 a −12 (con 20 m de transición)
   for (let iz = 0; iz < GNZ; iz++) for (let ix = 0; ix < GNX; ix++) {
     const i = iz * GNX + ix, x = GX0 + ix * CELL, z = GZ0 + iz * CELL, d = GD[i];
     if (d < WR + 14) { const r = hr[GI[i]]; GH[i] = d <= WR ? r : r * (1 - sm((d - WR) / 14)) + GH[i] * sm((d - WR) / 14); }      // calzada de 38 m a la cota del camino, con transición de 14 m al terreno real
     else if (inF7(x, z) && Math.abs(GH[i] - f7h(x, z)) < 2.5) { GH[i] = f7h(x, z); GD[i] = -1; }      // piso de la fase 7: plano (ahí se circula libre)
-    const dd = Math.hypot(x - dcx, z - dcz); if (d > WR + 2 && dd < 75) GH[i] = hL * (1 - sm((dd - 50) / 25)) + GH[i] * sm((dd - 50) / 25);      // explanada del domo
+    { const a = (x - fd.x) * fd.tx + (z - fd.z) * fd.tz, b = (x - fd.x) * fd.rx + (z - fd.z) * fd.rz, ea = Math.max(-25 - a, a - 215, 0), eb = Math.max(-72 - b, b + 12, 0), e = Math.hypot(ea, eb);      // explanada del domo y de los camiones estacionados
+      if (d > WR + 2 && e < 20) GH[i] = hL * (1 - sm(e / 20)) + GH[i] * sm(e / 20); }
   }
   const EQ = new Uint8Array(N);      // 1 = piso con equipos (fase 7, fondo, canchas): los caminos no cambian su cota
   for (const Pz of PISOS_DWG) {      // los demás pisos planos del rajo (fondo, terrazas): celdas de piso (ahí van las palas, dozers y canchas; no se tocan las cotas)
@@ -168,8 +169,14 @@ paso('terreno: distancia a la ruta, calzada excavada, piso de la fase 7 y patio 
           let yy = d <= WR ? y : y * (1 - sm((d - WR) / 8)) + GH[i] * sm((d - WR) / 8); if (GD[i] >= 0 && GD[i] <= WR + 14) { const wr = sm((GD[i] - WR) / 14); yy = hr[GI[i]] * (1 - wr) + yy * wr; } GH[i] = yy; }
       });
     }
+    {      // explanada del domo y de los camiones estacionados, otra vez al final: los caminos interiores que pasan por ahí (y su repavimentado) no la desnivelan
+      const fd = frame(L), hL = hr[Math.min(NS, Math.round(L))];
+      for (let iz = 0; iz < GNZ; iz++) for (let ix = 0; ix < GNX; ix++) { const i = iz * GNX + ix, x = GX0 + ix * CELL, z = GZ0 + iz * CELL; if (GD[i] <= WR + 2 && GD[i] >= 0) continue;
+        const a = (x - fd.x) * fd.tx + (z - fd.z) * fd.tz, b = (x - fd.x) * fd.rx + (z - fd.z) * fd.rz, e = Math.hypot(Math.max(-25 - a, a - 215, 0), Math.max(-72 - b, b + 12, 0));
+        if (e < 20) GH[i] = hL * (1 - sm(e / 20)) + GH[i] * sm(e / 20); }
+    }
     for (const { a: [ax, az], b: [bx, bz], cota, ancho, talud } of PRETILES) {      // pretiles a mano: al final, sobre todo lo demás
-      const top = cota - 1700, R = ancho / 2 + 30 / talud, vx = bx - ax, vz = bz - az, L2 = vx * vx + vz * vz;
+      const top = cota - DWG.YC, R = ancho / 2 + 30 / talud, vx = bx - ax, vz = bz - az, L2 = vx * vx + vz * vz;
       const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - R - GX0) / CELL)), i1 = Math.min(GNX - 1, Math.ceil((Math.max(ax, bx) + R - GX0) / CELL)), j0 = Math.max(0, Math.floor((Math.min(az, bz) - R - GZ0) / CELL)), j1 = Math.min(GNZ - 1, Math.ceil((Math.max(az, bz) + R - GZ0) / CELL));
       for (let iz = j0; iz <= j1; iz++) for (let ix = i0; ix <= i1; ix++) { const x = GX0 + ix * CELL, z = GZ0 + iz * CELL, t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / L2)), d = Math.hypot(x - ax - vx * t, z - az - vz * t), i = iz * GNX + ix;
         GH[i] = Math.max(GH[i], top - Math.max(0, d - ancho / 2) * talud); }

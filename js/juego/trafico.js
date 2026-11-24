@@ -4,7 +4,7 @@ import { clamp, hash } from '../comun/mates.js';
 import { addPlates } from '../modelos/materiales.js';
 import { ALJ_PLATE, CAEX_PLATE, buildPickup, protoAlj, protoOnc, protoSame } from '../modelos/camiones.js';
 import { buildDozerConRoca } from '../modelos/dozers.js';
-import { buildMotoniveladora } from '../modelos/motoniveladora.js';
+import { motoniveladora } from '../modelos/motoniveladora.js';
 import { scene } from '../escena.js';
 import { H, L, SMIN, frame, wetRange } from '../terreno/construir.js';
 import { pad } from '../comun/texto.js';
@@ -36,7 +36,7 @@ function mkAlj(s) {
 }
 const MOTO_CORD = -2.9;      // el cordón de tierra de la motoniveladora queda 2,9 m a su izquierda (punta trasera de la hoja, hacia el pretil): se la pasa por la derecha, por el otro lado del cordón
 function mkMoto(s) {      // motoniveladora nivelando tu pista (subiendo a ~7 km/h con la hoja abajo): deja un cordón de tierra a su izquierda; hay que pedirle autorización y pasarla por la derecha
-  const mesh = buildMotoniveladora(); scene.add(mesh);
+  const mesh = motoniveladora(); scene.add(mesh);
   const pos = [], idx = [], n = Math.max(2, Math.floor(Math.min(700, L - 5 - s) / 2));
   for (let i = 0; i <= n; i++) { const f = frame(s + i * 2), w = 0.6 + 0.2 * hash(i, 5), h = 0.5 + 0.3 * hash(5, i), dl = (hash(i * 3, 1) - 0.5) * 0.3;
     for (const [du, y] of [[-w, 0], [dl, h], [w, 0]]) { const u = -LANE + MOTO_CORD + du, x = f.x + f.rx * u, z = f.z + f.rz * u; pos.push(x, H(x, z) + 0.05 + y, z); } }
@@ -74,7 +74,7 @@ function stepDozer(dt) {
   if (Math.abs(s - P.s) < 4.4 && Math.abs(u - P.u) < 2.8) return endGame(false, 'Chocaste con un wheel dozer que empujaba una roca.');
 }
 function requestAuth() {
-  if (G.mode !== 'play') return;
+  if (G.mode !== 'play' || G.modo !== 'route') return;      // ningún modo pide autorización por ahora (karting: se adelanta sin pedirla; simulador: no hay ruta)
   const tg = findTarget(); if (!tg) return;
   const t = tg.t; t.auth = true;
   if (t.zona) startDozer(t);

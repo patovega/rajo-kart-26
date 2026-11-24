@@ -10,6 +10,7 @@ import { nearestRoca } from '../juego/rocas.js';
 import { findTarget, nearAuth, requestAuth } from '../juego/trafico.js';
 import { camera } from '../escena.js';
 import { dibujaMapa } from './mapa.js';
+import { KART } from '../juego/reglas.js';
 
 /* ───────────── Brújula (solo en modo prueba: nombre «federicovega») ───────────── */
 const brujula = (() => {      // canvas bajo el velocímetro: la flecha N apunta al norte real (−z del juego) según hacia dónde mira la cámara; abajo, el rumbo en grados
@@ -51,19 +52,21 @@ function drawBrujula() {
 }
 
 /* ───────────── Radar ───────────── */
-el.altmax.textContent = Math.round(L - START_S);
 el.auth.addEventListener('click', requestAuth);
 
 function updateHud() {
   drawBrujula(); dibujaMapa();
   const kmh = P.v * 3.6;
   el.kmh.textContent = Math.round(kmh);
-  el.bar.style.width = Math.min(100, kmh / 90 * 100) + '%';
-  el.bar.className = kmh > 60 ? 'bad' : (kmh >= 56 ? 'warn' : '');
-  el.spd.classList.toggle('flash', kmh > 60 && G.mode === 'play');
-  el.alt.textContent = Math.max(0, Math.min(Math.round(L - START_S), Math.round(P.s - START_S))); el.tm.textContent = fmt(G.tGame); el.ovk.textContent = G.overtakes;
+  const K = G.modo === 'kart', LM = Math.round((K ? KART.S : L) - START_S); el.altmax.textContent = LM; el.spd.classList.toggle('kart', K);      // kart: distancia hasta la meta, barra hasta 120 km/h y sin marca del límite
+  el.bar.style.width = Math.min(100, kmh / (K ? 120 : 90) * 100) + '%';
+  el.bar.className = G.modo === 'kart' ? '' : kmh > 60 ? 'bad' : (kmh >= 56 ? 'warn' : '');
+  el.spd.classList.toggle('flash', kmh > 60 && G.mode === 'play' && G.modo !== 'kart');
+  el.alt.textContent = Math.max(0, Math.min(LM, Math.round(P.s - START_S))); el.tm.textContent = fmt(G.tGame); el.ovk.textContent = G.overtakes;
 
   if (G.mode !== 'play') return;
+  el.auth.hidden = G.modo !== 'route';      // ningún modo pide autorización
+  { const vz = $('veloz'); if (vz) vz.style.opacity = G.modo === 'kart' ? Math.max(0, Math.min(0.85, (kmh - 55) / 55)) : 0; }      // líneas de velocidad en el kart
   const tg = findTarget(), na = nearAuth();
   if (tg) { el.auth.disabled = false; el.auth.className = ''; el.auth.innerHTML = 'Solicitar autorización<span class="kbk"> (0 / Espacio)</span><small>' + (tg.t.kind === 'moto' ? 'Motoniveladora' : 'CAEX-' + pad(tg.t.id)) + ' · a ' + Math.max(0, Math.round(tg.d - 8.5)) + ' m</small>'; }
   else if (na) { el.auth.disabled = true; el.auth.className = 'done'; el.auth.innerHTML = 'Autorizado<small>' + (na.t.kind === 'moto' ? 'Pasa por la derecha, lejos del cordón' : 'Adelanta por la derecha') + '</small>'; }
@@ -73,14 +76,15 @@ function updateHud() {
   let oncNear = false;
   for (const o of oncs) { const d = o.s - P.s; if (d > 0 && d < 120 && P.u > -2.5) oncNear = true; }
   let gapMin = 99;
-  for (const t of trucks) { const d = t.s - P.s; if (!t.auth && d > 0 && Math.abs(t.u - P.u) < 3.2) gapMin = Math.min(gapMin, d - 9.8); }
+  if (G.modo !== 'kart') for (const t of trucks) { const d = t.s - P.s; if (!t.auth && d > 0 && Math.abs(t.u - P.u) < 3.2) gapMin = Math.min(gapMin, d - 9.8); }
   const cn = nearestRoca(), camNear = cn ? cn.d : null;
   const al = [], A = (key, ico, num, label, sev) => al.push({ key, ico, num, label, sev });
   if (!G.intro && !G.arrive && !G.free && P.u < -(CRASH_U - 1.9)) A('pl', '⚠', '', 'Pretil izq.', 'bad');
   else if (!G.intro && !G.arrive && !G.free && P.u > CRASH_U - 1.9) A('pr', '⚠', '', 'Pretil der.', 'bad');
   if (camNear !== null) A('roca', '🚧', Math.max(0, Math.round(camNear)) + ' m', 'Roca', camNear < 25 ? 'bad' : 'warn');
   if (gapMin < FOLLOW_DIST + 12) A('caex', '🚛', Math.max(0, Math.round(gapMin)) + ' m', 'Mín. ' + FOLLOW_DIST + ' m', gapMin < FOLLOW_DIST + 5 ? 'bad' : 'warn');
-  if (kmh > 60 && !G.TEST) A('vel', 'SIGN:' + Math.round(kmh), '', 'Límite 60', 'bad');
+  if (G.modo === 'kart') {}      // en el karting no hay límite de velocidad
+  else if (kmh > 60 && !G.TEST) A('vel', 'SIGN:' + Math.round(kmh), '', 'Límite 60', 'bad');
   else if (kmh >= 56) A('vel', 'SIGN:60', '', 'Cerca del límite', 'warn');
   { const mn = trucks.find(t => t.kind === 'moto' && t.s - P.s > -12 && t.s - P.s < 160); if (mn) A('moto', '🚜', Math.max(0, Math.round(mn.s - P.s - 9.8)) + ' m', mn.auth ? 'Pasa por la derecha' : 'Motoniveladora', 'warn'); }
   if (slickNow(P.s) > 0.3) A('mojado', '💧', '', 'Piso mojado', 'warn');
@@ -93,7 +97,7 @@ function updateHud() {
 
   // sonido de aviso
   G.beepT -= 1 / 60;
-  if (kmh > 60 && !G.TEST && G.beepT <= 0) { beep(880, 0.1, 'square', 0.05); G.beepT = 0.28; }
+  if (kmh > 60 && !G.TEST && G.modo !== 'kart' && G.beepT <= 0) { beep(880, 0.1, 'square', 0.05); G.beepT = 0.28; }
   G.camBeepT -= 1 / 60; G.gapBeepT -= 1 / 60;
   if (gapMin < FOLLOW_DIST + 12 && G.gapBeepT <= 0) { beep(520, 0.12, 'sawtooth', 0.04); G.gapBeepT = 0.25 + Math.max(0, gapMin - FOLLOW_DIST) / 12 * 0.6; }   // CAEX muy cerca: pitido grave
   motorRpm(P.v);

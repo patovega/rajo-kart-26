@@ -9,7 +9,8 @@ import { CAEX_PLATE, nextCaexId, protoOnc } from '../modelos/camiones.js';
 import { buildHydShovel, buildShovel, dumpTune, hydPose, makePile, shovelPose } from '../modelos/palas.js';
 import { buildCrawlerDrill, buildDrill, nextDrillNum } from '../modelos/perforadoras.js';
 import { buildWheelDozer } from '../modelos/dozers.js';
-import { buildMotoniveladora } from '../modelos/motoniveladora.js';
+import { motoniveladora } from '../modelos/motoniveladora.js';
+import { RAMPAS } from '../comun/rampas.js';
 import { floorPath, gdAt, onRoadC } from './malla.js';
 
 const SHOV_T = 7.2;      // ciclo de la pala de cables (s): cava, gira, descarga y vuelve
@@ -162,16 +163,15 @@ function animOps(dt, tAnim) {
 }
 const MOTO_LN = [5.5, 2, -1.5, -5], MOTO_CORD = -2.9;      // carriles de las pasadas (desplazamiento lateral, m) y dónde cae el cordón respecto del centro de la máquina: la hoja va en diagonal (punta trasera
       // al lado −), así cada pasada deja un cordón de tierra que la pasada siguiente (3,5 m más allá) recoge y vuelve a correr; el de la última queda en la orilla
-const MOTO_EN = [[432.0, -95.0]];      // motoniveladoras (GD955): perfilan el camino interior más cercano a cada punto (la celeste junto a la fase 7, se ve desde la partida)
-function addMotoniveladora(px, pz, ph) {      // tramo de ~130 m por el eje del camino interior más cercano, muestreado cada 2 m (x, z, tangente)
-  let best = null; for (const C of CAMINOS_DWG) for (let k = 0; k < C.length; k++) { const d = Math.hypot(C[k][0] - px, C[k][1] - pz); if (!best || d < best.d) best = { d, C, k }; }
-  if (!best || best.d > 40) return;
-  const C = best.C, cum = [0]; for (let k = 1; k < C.length; k++) cum.push(cum[k - 1] + Math.hypot(C[k][0] - C[k - 1][0], C[k][1] - C[k - 1][1]));
-  const s0 = Math.max(0, cum[best.k] - 65), s1 = Math.min(cum[cum.length - 1], s0 + 130), P = [];
+const MOTO_EN = [[432.0, -95.0]];      // donde va la del camino de la celeste (se ve desde la partida); en los demás caminos va al medio      // motoniveladoras (GD955): perfilan el camino interior más cercano a cada punto (la celeste junto a la fase 7, se ve desde la partida)
+function addMotoniveladora(C, sc, ph, terrones) {      // tramo de hasta 130 m del camino C centrado en sc (m desde su comienzo), muestreado cada 2 m (x, z, tangente)
+  const cum = [0]; for (let k = 1; k < C.length; k++) cum.push(cum[k - 1] + Math.hypot(C[k][0] - C[k - 1][0], C[k][1] - C[k - 1][1]));
+  const Lc = cum[cum.length - 1], La = Math.min(130, Lc - 10); if (La < 40) return;
+  const s0 = Math.max(5, Math.min(Lc - 5 - La, sc - La / 2)), s1 = s0 + La, P = [];
   for (let s = s0, k = 0; s <= s1; s += 2) { while (k < C.length - 2 && cum[k + 1] < s) k++; const q = (s - cum[k]) / Math.max(1e-6, cum[k + 1] - cum[k]); P.push({ x: C[k][0] + (C[k + 1][0] - C[k][0]) * q, z: C[k][1] + (C[k + 1][1] - C[k][1]) * q }); }
   if (P.length < 10) return;
   for (let i = 0; i < P.length; i++) { const a = P[Math.max(0, i - 3)], b = P[Math.min(P.length - 1, i + 3)], n = Math.hypot(b.x - a.x, b.z - a.z) || 1; P[i].tx = (b.x - a.x) / n; P[i].tz = (b.z - a.z) / n; }
-  const g = buildMotoniveladora(); M.scene.add(g);
+  const g = motoniveladora(); M.scene.add(g);
   const mat = new THREE.MeshLambertMaterial({ color: 0x7f6648, flatShading: true, side: THREE.DoubleSide }), cord = MOTO_LN.map((off, k) => {      // cordón (camellón) de cada pasada: sección triangular irregular, ~1,8 m de ancho y 0,55–0,85 m de alto, tierra removida más oscura
     const o = off + MOTO_CORD, pos = [], idx = [];
     P.forEach((p, i) => { const nx = -p.tz, nz = p.tx, cx = p.x + nx * o, cz = p.z + nz * o, w = 0.8 + 0.3 * hash(i, k), h = 0.55 + 0.3 * hash(k, i), dl = (hash(i * 3, k) - 0.5) * 0.3;
@@ -179,9 +179,9 @@ function addMotoniveladora(px, pz, ph) {      // tramo de ~130 m por el eje del 
     for (let i = 0; i < P.length - 1; i++) { const a = 3 * i, b = a + 3; idx.push(a, b, a + 1, a + 1, b, b + 1, a + 1, b + 1, a + 2, a + 2, b + 1, b + 2); }
     const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); ge.setIndex(idx); ge.computeVertexNormals(); ge.setDrawRange(0, 0);
     const m = new THREE.Mesh(ge, mat); M.scene.add(m); return m; });
-  const terrones = new THREE.Group(), tg = new THREE.DodecahedronGeometry(0.22, 0), tm = new THREE.MeshLambertMaterial({ color: 0x8d7457, flatShading: true });      // terrones que ruedan por la punta trasera de la hoja
-  for (let k = 0; k < 14; k++) { const r = new THREE.Mesh(tg, tm); r.scale.setScalar(0.6 + 0.9 * hash(k, 7)); terrones.add(r); } M.scene.add(terrones);
-  OPS.MOTO.push({ g, P, ph, cord, terrones });
+  const T2 = new THREE.Group();      // terrones que ruedan por la punta trasera de la hoja (malla compartida)
+  if (terrones) { for (let k = 0; k < 10; k++) { const r = new THREE.Mesh(TERRON.g, TERRON.m); r.scale.setScalar(0.6 + 0.9 * hash(k, 7)); T2.add(r); } M.scene.add(T2); }
+  OPS.MOTO.push({ g, P, ph, cord, terrones: T2 });
 }
 function animMoto(tAnim) {      // pasada hacia adelante con la hoja abajo (~7 km/h), levanta la hoja, retrocede (~13 km/h), la baja y se corre al carril siguiente
   for (const Q of OPS.MOTO) {
@@ -208,6 +208,7 @@ function animMoto(tAnim) {      // pasada hacia adelante con la hoja abajo (~7 k
     }
   }
 }
+const TERRON = { g: new THREE.DodecahedronGeometry(0.22, 0), m: new THREE.MeshLambertMaterial({ color: 0x8d7457, flatShading: true }) };
 function drawTracks(pts) {      // huellas de camión: dos surcos oscuros (ruedas) siguiendo una curva suave por el piso
   if (!pts || pts.length < 2) return;
   const c = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p.x, 0, p.z))); c.curveType = 'centripetal'; const N = Math.max(24, Math.round(c.getLength() / 3));
@@ -247,7 +248,11 @@ function buildOps() {
     const f = M.frame(80), T = p.cable !== 'fondo' ? { x: f.x, z: f.z } : (FONDO && FONDO.salida ? { x: FONDO.salida[0], z: FONDO.salida[1] } : null); if (!T) continue;
     for (const o of M.OBST.filter(o => o.r === 8 && Math.hypot(o.x - p.x, o.z - p.z) < 40)) drawTracks(floorPath({ x: o.x - p.fx * 32, z: o.z - p.fz * 32 }, T));      // desde 32 m adelante de cada camión (ya fuera de la pala)
   }
-  MOTO_EN.forEach(([x, z], k) => addMotoniveladora(x, z, k * 37));      // motoniveladoras perfilando caminos interiores
+  RAMPAS.forEach((R, k) => {      // una motoniveladora por rampa con nombre, en su tramo más largo (al medio, o junto al punto de MOTO_EN si el tramo pasa por ahí)
+    const lg = C => { let l = 0; for (let i = 1; i < C.length; i++) l += Math.hypot(C[i][0] - C[i - 1][0], C[i][1] - C[i - 1][1]); return l; };
+    const C = R.caminos.map(i => CAMINOS_DWG[i]).sort((a, b) => lg(b) - lg(a))[0]; if (!C || C.length < 2) return; let sc = null, cum = 0, Lc = 0; for (let i = 1; i < C.length; i++) Lc += Math.hypot(C[i][0] - C[i - 1][0], C[i][1] - C[i - 1][1]);
+    for (const [x, z] of MOTO_EN) { cum = 0; for (let i = 0; i < C.length; i++) { if (i) cum += Math.hypot(C[i][0] - C[i - 1][0], C[i][1] - C[i - 1][1]); if (Math.hypot(C[i][0] - x, C[i][1] - z) < 40) { sc = cum; break; } } }
+    addMotoniveladora(C, sc ?? Lc / 2, 7 + k * 37.3, sc !== null); });
   for (const C of CAMINOS_DWG) for (const off of [-LANE, LANE]) {      // huellas en todos los caminos interiores: una pista por sentido, a ±LANE como en la ruta
     const pts = []; for (let k = 0; k < C.length; k++) { const a = C[Math.max(0, k - 1)], b = C[Math.min(C.length - 1, k + 1)], tx = b[0] - a[0], tz = b[1] - a[1], n = Math.hypot(tx, tz) || 1; pts.push({ x: C[k][0] - tz / n * off, z: C[k][1] + tx / n * off }); }
     drawTracks(pts);

@@ -6,12 +6,12 @@ import { startGame, tryStart } from './pantallas.js';
 /* Entrada */
 const keyMap = { ArrowUp: 'up', w: 'up', W: 'up', ArrowDown: 'down', s: 'down', S: 'down', ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right' };
 window.addEventListener('keydown', e => {
-  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) { if (e.key === 'Enter' && G.mode === 'menu') tryStart(); return; }      // al escribir el nombre no se activan los controles
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) { if (e.key === 'Enter' && G.mode === 'menu') tryStart('kart'); return; }      // al escribir el nombre no se activan los controles
   const k = keyMap[e.key];
   if (k) { keys[k] = true; e.preventDefault(); return; }
   if (e.key === '0' || e.key === ' ' || e.code === 'Space') { e.preventDefault(); if (!e.repeat) requestAuth(); }
   else if (e.key === 'r' || e.key === 'R') { if (G.mode === 'over' || G.mode === 'win' || G.mode === 'play') startGame(); }
-  else if (e.key === 'Enter' && G.mode === 'menu') tryStart();
+  else if (e.key === 'Enter' && G.mode === 'menu') tryStart('kart');
 });
 window.addEventListener('keyup', e => { const k = keyMap[e.key]; if (k) keys[k] = false; });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });

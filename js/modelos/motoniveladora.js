@@ -19,7 +19,7 @@ function buildMotoniveladora() {
   const tireG = new THREE.LatheGeometry([[0.42, -0.3], [0.62, -0.33], [0.75, -0.31], [0.81, -0.2], [0.82, 0], [0.81, 0.2], [0.75, 0.31], [0.62, 0.33], [0.42, 0.3]].map(([r, y]) => new THREE.Vector2(r, y)), 32);
   g.userData.ruedas = [];
   for (const z of [ZF, ...ZT]) for (const sx of [-1, 1]) {      // rueda: neumático torneado con tacos, llanta amarilla con maza y pernos
-    const wh = new THREE.Group(); wh.position.set(sx * TX, R, z); g.add(wh); g.userData.ruedas.push(wh);
+    const wh = new THREE.Group(); wh.name = 'rueda'; wh.position.set(sx * TX, R, z); g.add(wh); g.userData.ruedas.push(wh);
     const t = new THREE.Mesh(tireG, tire); t.rotation.z = Math.PI / 2; wh.add(t);
     for (let a = 0; a < 22; a++) { const aa = a * Math.PI / 11, s2 = a % 2 ? 1 : -1, l = box(wh, 0.3, 0.1, 0.2, blk, s2 * 0.14, Math.cos(aa) * (R + 0.005), Math.sin(aa) * (R + 0.005)); l.rotation.x = aa; }
     cyl(wh, 0.44, 0.44, 0.6, yel2, 0, 0, 0, Math.PI / 2); cyl(wh, 0.26, 0.26, 0.64, dk, 0, 0, 0, Math.PI / 2); cyl(wh, 0.16, 0.12, 0.06, steel, sx * 0.33, 0, 0, Math.PI / 2);
@@ -41,7 +41,7 @@ function buildMotoniveladora() {
   for (const sx of [-1, 1]) { rod([sx * 0.4, 2.7, 3.1], [sx * 0.85, 1.95, 2.8], 0.1, hyd); rod([sx * 0.85, 1.95, 2.8], [sx * 1.15, 1.2, 2.5], 0.06, chrome); }
   rod([0.3, 2.5, 1.9], [1.3, 1.0, 2.1], 0.06, hyd);      // cilindro de desplazamiento lateral
   // hoja (vertedera) curva, en diagonal, con cuchilla y cantoneras; sube y baja con userData.hoja
-  { const H = new THREE.Group(); H.position.set(0, 0, 2.35); H.rotation.y = 0.5; g.add(H); g.userData.hoja = H;
+  { const H = new THREE.Group(); H.name = 'hoja'; H.position.set(0, 0, 2.35); H.rotation.y = 0.5; g.add(H); g.userData.hoja = H;
     const mm = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 6.1, 18, 1, true, Math.PI * 0.62, Math.PI * 0.72), gris); mm.rotation.z = Math.PI / 2; mm.position.set(0, 0.56, 0.3); H.add(mm);
     box(H, 6.12, 0.1, 0.12, steel, 0, 0.07, 0.08); for (const sx of [-1, 1]) box(H, 0.14, 0.95, 0.5, dk, sx * 3.06, 0.5, 0.02);
     box(H, 5.8, 0.22, 0.16, yel, 0, 0.8, -0.32); box(H, 5.8, 0.18, 0.16, yel, 0, 0.35, -0.3); for (const x of [-2.2, -1.1, 0, 1.1, 2.2]) box(H, 0.16, 0.6, 0.2, yel, x, 0.58, -0.32); }
@@ -69,5 +69,24 @@ function buildMotoniveladora() {
   box(g, 2.0, 0.32, 0.3, yel, 0, 0.75, -5.95); for (const x of [-0.8, -0.4, 0, 0.4, 0.8]) { box(g, 0.11, 0.7, 0.22, steel, x, 0.4, -6.0); box(g, 0.1, 0.16, 0.3, dk, x, 0.08, -5.92); }
   return g;
 }
+function fusionar(root) {      // junta las mallas de root (sin entrar a los grupos que se mueven: hoja y ruedas) en una por material: ~320 mallas → ~15
+  root.updateMatrixWorld(true); const inv = new THREE.Matrix4().copy(root.matrixWorld).invert(), grupos = new Map(), quitar = [];
+  const rec = o => { for (const ch of o.children) { if (ch !== root && (ch.name === 'hoja' || ch.name === 'rueda')) continue;
+    if (ch.isMesh && !Array.isArray(ch.material) && !ch.material.transparent) { let ge = ch.geometry.index ? ch.geometry.toNonIndexed() : ch.geometry.clone(); ge.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, ch.matrixWorld));
+      if (!ge.attributes.normal) ge.computeVertexNormals(); const k = ch.material.uuid; if (!grupos.has(k)) grupos.set(k, { m: ch.material, gs: [] }); grupos.get(k).gs.push(ge); quitar.push(ch); }
+    rec(ch); } };
+  rec(root);
+  for (const ch of quitar) ch.parent.remove(ch);
+  for (const { m, gs } of grupos.values()) { let n = 0; for (const ge of gs) n += ge.attributes.position.count;
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2); let o = 0;
+    for (const ge of gs) { const c = ge.attributes.position.count; pos.set(ge.attributes.position.array, o * 3); nor.set(ge.attributes.normal.array, o * 3); if (ge.attributes.uv) uv.set(ge.attributes.uv.array, o * 2); o += c; ge.dispose(); }
+    const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.BufferAttribute(pos, 3)); ge.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); ge.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    ge.computeBoundingSphere(); root.add(new THREE.Mesh(ge, m)); }
+}
+let PROTO = null;
+function motoniveladora() {      // copia liviana (mallas fusionadas, geometría compartida) para poner muchas: userData.hoja y userData.ruedas apuntan a los grupos de la copia
+  if (!PROTO) { PROTO = buildMotoniveladora(); PROTO.updateMatrixWorld(true); for (const w of PROTO.userData.ruedas) fusionar(w); fusionar(PROTO.userData.hoja); fusionar(PROTO); }
+  const g = PROTO.clone(true); g.userData = { hoja: g.getObjectByName('hoja'), ruedas: g.children.filter(c => c.name === 'rueda') }; return g;
+}
 
-export { buildMotoniveladora };
+export { buildMotoniveladora, motoniveladora };

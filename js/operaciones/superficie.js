@@ -34,9 +34,16 @@ function buildSuperficie() {      // domo mirador con bandera, aljibe y camiones
     const p = at(s, u), m = proto.clone(true); if (plates) addPlates(m, num, plates.f, plates.r, plates.s);
     scene.add(m); setWorldPose(m, p.x, p.z, p.f.rx * face, p.f.rz * face); freeze(m); return m;
   };
-  for (let i = 0; i < 5; i++) park(protoOnc, L + 95 + i * 10.8, -34, -1, 140 + i, CAEX_PLATE);
-  for (let i = 0; i < 4; i++) park(protoOnc, L + 100 + i * 10.8, -54, 1, 150 + i, CAEX_PLATE);
-  const aj = park(protoAlj, L + 150, -34, -1, 703, ALJ_PLATE); const sp = aj.getObjectByName('spray'); if (sp) sp.visible = false;
+  const B = { s0: 28, paso: 14, n: 10, u0: -21, u1: -41 };      // estacionamiento frente al domo: 10 bahías de 14 m entre pretiles en U (abiertas hacia el camino); los camiones entran de cola
+  { const sec = new THREE.Shape([[-2.3, 0], [2.3, 0], [0.55, 2.2], [-0.55, 2.2]].map(([a, b]) => new THREE.Vector2(a, b))), mat = lam(0xa98b66, { flatShading: true });      // pretil: sección trapezoidal de 4,6 m de base y 2,2 m de alto
+    const pretil = (s1, u1, s2, u2) => { const a = at(s1, u1), b = at(s2, u2), l = Math.hypot(b.x - a.x, b.z - a.z), ge = new THREE.ExtrudeGeometry(sec, { depth: l + 2, bevelEnabled: false }); ge.translate(0, -0.4, -(l + 2) / 2);
+      const m = new THREE.Mesh(ge, mat), mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2; m.position.set(mx, H(mx, mz), mz); m.lookAt(mx + (b.x - a.x), H(mx, mz), mz + (b.z - a.z)); scene.add(m); };
+    for (let k = 0; k <= B.n; k++) { const s = L + B.s0 + k * B.paso; pretil(s, B.u0, s, B.u1); }      // pretiles entre bahías
+    for (let k = 0; k < B.n; k++) pretil(L + B.s0 + k * B.paso, B.u1, L + B.s0 + (k + 1) * B.paso, B.u1);      // pretil del fondo
+  }
+  const enBahia = k => L + B.s0 + (k + 0.5) * B.paso, uC = B.u1 + 1.6 + 7.8;      // en cada bahía, de cola contra el pretil del fondo y con la nariz hacia el camino
+  for (let k = 0; k < 9; k++) park(protoOnc, enBahia(k), uC, 1, k < 5 ? 140 + k : 150 + k - 5, CAEX_PLATE);
+  const aj = park(protoAlj, enBahia(9), uC + 1.5, 1, 703, ALJ_PLATE); const sp = aj.getObjectByName('spray'); if (sp) sp.visible = false;
   park(protoPick, L + 178, -24, 1, 0, null); park(protoPick, L + 190, -24, 1, 0, null);
 (() => { // estacionamiento CAEX junto al poste pasacable (desactivado hasta ubicar la bahía)
   if (!CAEX_LANE.on) return;

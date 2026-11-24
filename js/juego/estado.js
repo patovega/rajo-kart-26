@@ -15,6 +15,7 @@ const G = {
   crashSide: 0, crashT: 0, fall: null, crashFall: false, crush: null,      // choque contra el pretil (lado y tiempo), caída al rajo, aplastamiento
   intro: null, arrive: null, free: null,          // salida automática, tramo final hasta el domo, tránsito libre por la fase 7: { x, z, a, gate }
   FREE0: null,                                    // punto de partida del tránsito libre (lo calcula buscarPartidaLibre una vez armado el mundo)
+  modo: 'kart',                                   // 'kart' (carrera de la fase intermedia a la meta, sin autorizaciones) | 'sim' (simulador: recorrido libre por la mina)
   TEST: false, playerName: '',                    // modo prueba (nombre «federicovega»): sin tráfico, sin límite de velocidad, no se envía al ranking
 };
 const ganchos = { endGame: (win, msg) => {} };      // la pantalla de fin de partida la instala js/ui/pantallas.js (el juego no importa de la interfaz)
@@ -30,6 +31,7 @@ function place(mesh, s, u, dir, lat) {
   return y;
 }
 const pickup = buildPickup(); scene.add(pickup);
+
 const keys = { up: false, down: false, left: false, right: false };      // flechas / WASD y botones táctiles (las escribe js/ui/teclado.js)
 const P = { s: 10, u: -LANE, v: 0, vu: 0, y: 0 };      // la camioneta sobre la ruta: metros recorridos s, posición lateral u (u > 0 = derecha), velocidad v, velocidad lateral vu, cota y
 const OBST = [];      // equipos detenidos en las bahías (x, z, radio): en el tránsito libre no se pueden atravesar

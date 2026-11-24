@@ -3,6 +3,7 @@ import { CELL, GCP, GD, GH, GNX, GNZ, GP, GR, GX0, GZ0 } from '../terreno/altura
 import { GEO_ZONES, L, START_S, frame } from '../terreno/ruta.js';
 import { WR } from '../config/diseno.js';
 import { CAMINOS_DWG } from '../datos/terreno_dwg.js';
+import { RAMPAS } from '../comun/rampas.js';
 import { TAU } from '../config/diseno.js';
 import { clamp } from '../comun/mates.js';
 import { G, P, oncs, pickup, trucks } from '../juego/estado.js';
@@ -23,15 +24,8 @@ const img = document.createElement('canvas'); img.width = GNX; img.height = GNZ;
   c.putImageData(d, 0, 0);
   const pt = s => { const f = frame(s); return [(f.x - GX0) / CELL, (f.z - GZ0) / CELL]; };
   const trazo = (a, b, col, w) => { c.strokeStyle = col; c.lineWidth = w; c.lineCap = c.lineJoin = 'round'; c.beginPath(); for (let s = a; s <= b; s += 8) { const [x, y] = pt(Math.min(s, b)); s === a ? c.moveTo(x, y) : c.lineTo(x, y); } c.stroke(); };
-  {      // rampas interiores en color, como la ruta (la azul al fondo, la celeste por la orilla de la fase 7 y las demás con otros colores); caminos de banco (casi planos) y cortos quedan blancos
-    const largo = C => { let l = 0; for (let i = 1; i < C.length; i++) l += Math.hypot(C[i][0] - C[i - 1][0], C[i][1] - C[i - 1][1]); return l; };
-    const cerca = (C, x, z) => Math.hypot(C[0][0] - x, C[0][1] - z) < 20;
-    const PAL = ['#33c24d', '#ff8a1f', '#9b5de5', '#ff5fa2', '#20c4b4', '#b5e61d', '#e8462c', '#c8a2ff'];
-    let n = 0;
-    CAMINOS_DWG.forEach(C => { if (C.length < 2) return; const dy = Math.abs(C[C.length - 1][2] - C[0][2]); if (dy < 15 || largo(C) < 150) return;
-      const col = cerca(C, 140, -356) || cerca(C, 137, -354) ? '#2f7fe0' : cerca(C, 248, -352) ? '#6fd3f5' : PAL[n++ % PAL.length];
-      for (const [cl, w] of [['rgba(30,20,10,.8)', 5.5], [col, 3.2]]) { c.strokeStyle = cl; c.lineWidth = w; c.lineCap = c.lineJoin = 'round'; c.beginPath(); C.forEach(([x, z], i) => { const X = (x - GX0) / CELL, Y = (z - GZ0) / CELL; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.stroke(); } });
-  }
+  for (const R of RAMPAS) for (const k of R.caminos) {      // rampas con nombre en su color, como la ruta (azul, celeste, verde, rojo, naranja, rosado); los demás caminos quedan blancos
+    const C = CAMINOS_DWG[k]; for (const [cl, w] of [['rgba(30,20,10,.8)', 5.5], [R.color, 3.2]]) { c.strokeStyle = cl; c.lineWidth = w; c.lineCap = c.lineJoin = 'round'; c.beginPath(); C.forEach(([x, z], i) => { const X = (x - GX0) / CELL, Y = (z - GZ0) / CELL; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.stroke(); } }
   trazo(START_S, L, 'rgba(30,20,10,.85)', 6.5); trazo(START_S, L, '#ffc61a', 4);      // la ruta, como la línea del GPS
   for (const z of GEO_ZONES) trazo(Math.max(START_S, z.a), Math.min(L, z.b), '#e5262b', 4);      // tramos de riesgo geotécnico
 }

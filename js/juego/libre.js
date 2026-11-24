@@ -31,25 +31,26 @@ const freeBlocked = (x, z, hx, hz) => {      // talud, pila o caída adelante, o
 const cableBajo = (x, z) => OBST.some(o => o.r === 1.2 && Math.hypot(o.x - x, o.z - z) < 1.9);      // la camioneta está sobre un cable tendido por el piso
 function stepFree(dt) {      // tránsito libre por el piso de la fase 7 (sin pistas ni reglas): se toma la Rampa Sur al llegar a ella
   const F = G.free, thr = Math.max(keys.up ? 1 : 0, inp.thr), brk = Math.max(keys.down ? 1 : 0, inp.brk);
-  const vt = 8.3 + (G.TEST ? 13.9 : 5.6) * thr;      // 30 km/h sola, hasta 50 con ↑ o el pedal (80 en modo prueba)
+  const vt = G.modo === 'kart' ? 12.5 + 18 * thr : 8.3 + (G.TEST ? 13.9 : 5.6) * thr;      // camioneta: 30 km/h sola, hasta 50 con ↑ o el pedal (80 en modo prueba); kart: 45 y hasta 110
   let acc; if (brk > 0.05) acc = -7 * brk; else if (P.v < vt) acc = Math.min(2.8, (vt - P.v) * 2.5 + 0.2); else acc = -Math.min(1.5, (P.v - vt) * 4);
-  P.v = clamp(P.v + acc * dt, 0, VTOP);
+  P.v = clamp(P.v + acc * dt, 0, Math.max(VTOP, vt));
   const kbs = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), steer = kbs || (inp.analog && Math.abs(inp.steer) > 0.05 ? inp.steer : 0);
   F.a += steer * Math.max(0.7, Math.min(P.v / 9, 1.3)) * dt;      // también gira detenida, para salir de un talud
   const hx = Math.cos(F.a), hz = Math.sin(F.a), nx = F.x + hx * P.v * dt, nz = F.z + hz * P.v * dt;
   let gateMsg = false;
-  if (M.GATE && !F.gate && !G.TEST) {      // solo se llega a la Rampa Sur pasando entre los postes pasacables
+  if (M.GATE && !F.gate && !G.TEST && G.modo !== 'sim') {      // solo se llega a la Rampa Sur pasando entre los postes pasacables
     const near = (x, z) => { let b = null; for (let s = START_S; s < START_S + 260; s += 2) { const f = frame(s), d = Math.hypot(f.x - x, f.z - z); if (!b || d < b.d) b = { s, d }; } return b; };
     const hiA = H(F.x, F.z) > f7h(F.x, F.z) + 3, hiN = H(nx, nz) > f7h(nx, nz) + 3;      // arriba de la rampa o en la cancha de perforación (sobre el piso de la bahía) no rige el portón
     if (!hiN) { const a = near(F.x, F.z), b = near(nx, nz);
       if (a.d >= M.GATE.d && b.d < M.GATE.d) { if (b.s > M.GATE.s0 + 1.5 && b.s < M.GATE.s1 - 1.5) F.gate = true; else gateMsg = true; }
       else if (hiA && b.d < M.GATE.d) gateMsg = true; }      // bajar de la cancha hacia el camino tampoco vale: al camino se entra por el portón
   }
-  if (!G.TEST && cableBajo(nx, nz)) { F.x = nx; F.z = nz; P.v = 0; return endGame(false, 'Pasaste sobre el cable eléctrico.'); }      // federicovega (modo prueba) pasa sin consecuencias
+  if (G.modo === 'sim' && cableBajo(nx, nz) && !(G.bannerT > 0)) { setBanner('¡Ojo! Pasaste sobre un cable eléctrico.', 'warn'); G.bannerT = 2; }      // simulador: solo el aviso
+  if (!G.TEST && G.modo !== 'sim' && cableBajo(nx, nz)) { F.x = nx; F.z = nz; P.v = 0; return endGame(false, 'Pasaste sobre el cable eléctrico.'); }      // federicovega (modo prueba) pasa sin consecuencias
   if (gateMsg) { P.v = 0; setBanner('Entra a la Rampa Sur por entre los postes pasacables.', 'warn'); G.bannerT = 2; }
   else if (freeBlocked(nx, nz, hx, hz)) { if (P.v > 3) { beep(90, 0.18, 'sawtooth', 0.06); G.shake = Math.max(G.shake, 0.3); } P.v = 0; }
   else { F.x = nx; F.z = nz; }
-  if (G.TEST) return;      // modo prueba: recorrido libre por toda la mina (no se amarra a la Rampa Sur)
+  if (G.TEST || G.modo === 'sim') return;      // modo prueba y simulador: recorrido libre por toda la mina (no se amarra a la Rampa Sur)
   // ¿llegó a la Rampa Sur? (tramo junto a la fase 7)
   let bs = null; for (let s = START_S; s < START_S + 260; s += 2) { const f = frame(s), d = (f.x - F.x) ** 2 + (f.z - F.z) ** 2; if (!bs || d < bs.d) bs = { s, d, f }; }
   const f = bs.f, u = (F.x - f.x) * f.rx + (F.z - f.z) * f.rz;
